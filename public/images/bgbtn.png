@@ -1,0 +1,83 @@
+<html>
+<head>
+<meta name="viewport" content="initial-scale=1.0">
+<title>SSL Inspection</title>
+
+<style>
+    h2{font-size:16px;font-weight:bold;color:#196390;}
+    #content {
+      border:3px solid#aaa;
+      background-color:#fff;
+      margin:1.2em;
+      padding:1.2em;
+      font-family:Tahoma,Helvetica,Arial,sans-serif;
+      font-size:1em;
+    }
+    h1 {
+      font-size:1.2em;
+      font-weight:bold;
+      color:#196390;
+    }
+    b {
+      font-weight:normal;
+      color:#196390;
+    }
+    form td, form input {
+      font-size: 1em;
+      font-weight: bold;
+    }
+    #formtable {
+      height: 100%;
+      width: 100%;
+    }
+    #formtd {
+      vertical-align: middle;
+    }
+    #formdiv {
+      margin-left: auto;
+      margin-right: auto;
+    }
+</style>
+
+<script language="JavaScript">
+    function focusokbtn()
+    {
+	    try {
+		    document.getElementById("yes").focus();
+	    } catch (e) {}
+    }
+    function foreachqstring(fn) {
+	    var query = window.location.search.substring(1);
+	    var parms = query.split('&');
+	    for (var i = 0; i < parms.length; i++) {
+		    var pair = parms[i].split("=");
+		    if (pair[0]) {
+			    fn(unescape(pair[0]),unescape(pair[1]));
+		    }
+	    }
+    }
+    function collectqstring() {
+	    var buf='';
+	    foreachqstring(
+		    function(n,v) {
+			    buf += '<input type="hidden" name="' + n + '"value="' + v + '" />';
+		    }	
+	    );
+	    document.getElementById('qstring').innerHTML = buf; 
+    }
+</script>
+</head>
+<body bgcolor="#e7e8e9" onLoad="collectqstring();focusokbtn()">
+<div id="content">
+<h1>SSL Inspection</h1>
+<p>You are trying to access a URL that is a suspected child sexual abuse or exploitation material (CSAEM). We will initiate decryption of traffic for possible CSAEM content and block access as mandated by Republic Act No. 9775 or the Anti-Child Pornography Act of 2009. Otherwise, traffic will then be re-encrypted and sent to destination.</p>
+<p>By proceeding with this session, you are aware and agree that this action will give us access to your data, i.e., source IP address, destination IP address and destination URL.</p>
+
+<p>Would you like to proceed with this session?</p><br>
+<form method="get" name="notify">
+<div id='qstring'></div>
+<input type="submit" id="yes" name="_pan_ssl" value="Yes">&nbsp;<input type="submit" name="_pan_ssl" value="No"></form>
+</div>
+</body>
+</html>
+

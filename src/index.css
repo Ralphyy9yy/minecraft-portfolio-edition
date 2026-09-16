@@ -1,0 +1,477 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Minecraftia';
+  src: url('https://cdn.jsdelivr.net/gh/South-Paw/typeface-minecraft/files/minecraftia-regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --mc-font: 'Minecraftia', 'Press Start 2P', 'VT323', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--mc-font);
+  image-rendering: pixelated;
+  user-select: none;
+  background-color: #141414;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  cursor: url('/images/cursor-default.svg') 0 0, default;
+}
+
+/* Custom Minecraft Theme Cursors */
+html, body, div, p, span, h1, h2, h3, h4, h5, h6 {
+  cursor: url('/images/cursor-default.svg') 0 0, default;
+}
+
+/* Minecraft Diamond Sword for interactive elements */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+.minecraft-button,
+.linktree-item,
+.server-item,
+.realms-card,
+.language-button,
+.audio-toggle-button,
+[onclick] {
+  cursor: url('/images/cursor-pointer.svg') 2 2, pointer !important;
+}
+
+/* Panoramic background matching johncraft.dev */
+.panoramic-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 120%;
+  height: 120%;
+  background: url(/images/minecraft-panorama.jpg) center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  animation: panorama 120s ease-in-out infinite;
+  z-index: 0;
+}
+
+.panoramic-background:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+
+@keyframes panorama {
+  0% { transform: scale(1) translate(0) rotate(0deg); }
+  25% { transform: scale(1.08) translate(-2%, -2%) rotate(.5deg); }
+  50% { transform: scale(1.04) translate(2%, -1%) rotate(-.5deg); }
+  75% { transform: scale(1.08) translate(-1%, 2%) rotate(.3deg); }
+  100% { transform: scale(1) translate(0) rotate(0deg); }
+}
+
+/* Text Shadows */
+.mc-text-shadow {
+  text-shadow: 2px 2px 0px #000000;
+}
+
+.mc-text-shadow-dark {
+  text-shadow: 2px 2px 0px #3f3f3f;
+}
+
+/* Authentic Minecraft Button matching johncraft.dev */
+.minecraft-button {
+  image-rendering: pixelated;
+  color: #ddd;
+  text-shadow: 2px 2px 0px #000000;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  background: #999 url(/images/bgbtn.png) 50%/cover;
+  border: 3px solid #000;
+  outline: none;
+  padding-top: 11px;
+  font-family: var(--mc-font);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1;
+  transition: none;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset -3px -5px 0px 0px rgba(0, 0, 0, 0.4), inset 3px 3px 0px 0px rgba(255, 255, 255, 0.47);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.minecraft-button:hover:not(:disabled) {
+  background: #6464ff80 url(/images/bgbtn.png) 50%/cover;
+  background-blend-mode: multiply;
+  color: #ffffa0;
+  text-shadow: 2px 2px 0px #202013;
+  border-color: #000;
+}
+
+.minecraft-button:active:not(:disabled) {
+  background: #555555 url(/images/bgbtn.png) 50%/cover;
+  box-shadow: inset 3px 5px 0px 0px rgba(0, 0, 0, 0.6), inset -3px -3px 0px 0px rgba(255, 255, 255, 0.2);
+  padding-top: 13px;
+}
+
+.minecraft-button:disabled {
+  color: #888;
+  text-shadow: 1px 1px #000;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.main-menu-button {
+  width: 400px;
+  max-width: 90vw;
+  height: 52px;
+  font-size: 15px;
+}
+
+.small-menu-button {
+  width: 196px;
+  max-width: 44vw;
+  height: 52px;
+  font-size: 15px;
+}
+
+.language-button {
+  width: 52px;
+  height: 52px;
+  font-size: 24px;
+  padding-top: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Audio Toggle Button */
+.audio-toggle-button {
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  z-index: 9999 !important;
+}
+
+/* Titles and Logos */
+.minecraft-title-image {
+  width: auto;
+  height: auto;
+  max-width: 85vw;
+  max-height: 240px;
+  image-rendering: pixelated;
+  filter: drop-shadow(4px 4px 0px #000000);
+  user-select: none;
+}
+
+/* Splash Text */
+.minecraft-splash {
+  color: #ffff55;
+  font-weight: 700;
+  font-size: 16px;
+  text-shadow: 2px 2px 0px #3f3f00;
+  animation: splash 1.5s ease-in-out infinite alternate;
+  transform-origin: center center;
+}
+
+@keyframes splash {
+  0% { transform: rotate(-20deg) scale(1); }
+  100% { transform: rotate(-18deg) scale(1.08); }
+}
+
+/* Menu button containers */
+.menu-buttons-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Profile Picture & About Me */
+.profile-picture-small {
+  width: 155px;
+  height: 225px;
+  border: 4px solid #000;
+  box-shadow: inset -3px -5px rgba(0,0,0,0.4), inset 3px 3px rgba(255,255,255,0.47), 0 8px 32px rgba(0,0,0,0.5);
+  border-radius: 6px;
+  object-fit: cover;
+  image-rendering: pixelated;
+  background: #000000b3;
+}
+
+.profile-picture-inline {
+  float: left;
+  margin: 0 16px 12px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.about-description {
+  margin: 0 auto 20px;
+  padding: 18px 24px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 3px solid #000;
+  box-shadow: inset -2px -4px rgba(0,0,0,0.4), inset 2px 2px rgba(255,255,255,0.2);
+  line-height: 1.6;
+}
+
+.highlight {
+  color: #fbbf24;
+  font-weight: 700;
+  text-shadow: 2px 2px 0px #000000;
+}
+
+/* Linktree Items */
+.linktree-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 600px;
+  margin: 0 auto 20px;
+  width: 100%;
+}
+
+.linktree-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 18px;
+  border: 3px solid #000;
+  box-shadow: inset -3px -5px rgba(0,0,0,0.4), inset 3px 3px rgba(255,255,255,0.47);
+  background: #8b8b8b url(/images/bgbtn.png) center / cover;
+  cursor: pointer;
+  gap: 14px;
+  color: #ddd;
+  text-shadow: 2px 2px 0px #000;
+}
+
+.linktree-item:hover {
+  background: #6464ff80 url(/images/bgbtn.png) 50%/cover;
+  background-blend-mode: multiply;
+  color: #ffffa0;
+}
+
+.linktree-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.linktree-info {
+  flex: 1;
+  text-align: left;
+}
+
+.linktree-name {
+  font-size: 14px;
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 2px 2px 0px rgba(0,0,0,0.8);
+  margin-bottom: 2px;
+}
+
+.linktree-description {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 1px 1px 0px rgba(0,0,0,0.6);
+}
+
+.linktree-arrow {
+  font-size: 20px;
+  color: #fff;
+  text-shadow: 2px 2px 0px rgba(0,0,0,0.6);
+  flex-shrink: 0;
+}
+
+/* Server list in multiplayer screen */
+.server-list {
+  background: rgba(0, 0, 0, 0.85);
+  border: 3px solid #000;
+  box-shadow: inset -2px -4px rgba(0,0,0,0.4), inset 2px 2px rgba(255,255,255,0.2);
+  min-height: 180px;
+  max-height: 48vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.server-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: rgba(0, 0, 0, 0.4);
+  gap: 12px;
+}
+
+.server-item:hover {
+  background: rgba(100, 100, 255, 0.25);
+  border: 2px solid rgba(100, 100, 255, 0.5);
+}
+
+.server-item.selected {
+  background: rgba(100, 100, 255, 0.45);
+  border: 2px solid #8080ff;
+}
+
+.server-thumbnail {
+  width: 54px;
+  height: 54px;
+  background: #404040;
+  border: 2px solid #000;
+  box-shadow: inset -1px -2px rgba(0,0,0,0.4), inset 1px 1px rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.server-info {
+  flex: 1;
+  text-align: left;
+}
+
+/* Ping Bars */
+.ping-bars {
+  display: flex;
+  gap: 1.5px;
+  align-items: flex-end;
+  height: 14px;
+}
+
+.ping-bar {
+  width: 2.5px;
+  background: #404040;
+}
+
+.ping-bar.active {
+  background: #00ff00;
+}
+
+/* Realms & Certifications Grid */
+.realms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.realm-card {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.realm-card:hover {
+  transform: translateY(-3px);
+}
+
+.realm-image {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  background: linear-gradient(45deg, #1e3a8a, #3b82f6, #60a5fa);
+  border: 3px solid #1f2937;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.realm-card:hover .realm-image {
+  border-color: #fbbf24;
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.4);
+}
+
+.realm-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border: 2px solid #ffffff;
+  padding: 2px 6px;
+  color: #fff;
+  text-shadow: 1px 1px 0px #000;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.realm-thumbnail {
+  width: 64px;
+  height: 64px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.realm-info {
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid #000;
+  box-shadow: inset -1px -2px rgba(0,0,0,0.4), inset 1px 1px rgba(255,255,255,0.2);
+  padding: 10px;
+  text-align: left;
+}
+
+/* Minecraft Window Modal */
+.mc-window {
+  background: #c6c6c6;
+  border: 3px solid #000;
+  box-shadow: inset -3px -3px 0px 0px #555, inset 3px 3px 0px 0px #fff;
+  color: #000;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #3a3a3a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #707070;
+  border: 2px solid #000;
+  box-shadow: inset -1px -2px rgba(0,0,0,0.4), inset 1px 1px rgba(255,255,255,0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8b8b8b;
+}
+
