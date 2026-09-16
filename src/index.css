@@ -138,27 +138,47 @@ textarea,
 }
 
 .main-menu-button {
-  width: 400px;
-  max-width: 90vw;
-  height: 52px;
-  font-size: 15px;
+  width: 100%;
+  max-width: 400px;
+  height: 48px;
+  font-size: 14px;
+}
+@media (min-width: 640px) {
+  .main-menu-button {
+    height: 52px;
+    font-size: 15px;
+  }
 }
 
 .small-menu-button {
-  width: 196px;
-  max-width: 44vw;
-  height: 52px;
-  font-size: 15px;
+  flex: 1;
+  min-width: 0;
+  max-width: 170px;
+  height: 48px;
+  font-size: 13px;
+}
+@media (min-width: 640px) {
+  .small-menu-button {
+    height: 52px;
+    font-size: 15px;
+  }
 }
 
 .language-button {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
   font-size: 24px;
   padding-top: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+@media (min-width: 640px) {
+  .language-button {
+    width: 52px;
+    height: 52px;
+  }
 }
 
 /* Audio Toggle Button */
@@ -222,11 +242,21 @@ textarea,
 }
 
 .profile-picture-inline {
-  float: left;
-  margin: 0 16px 12px 0;
   display: flex;
   justify-content: center;
   align-items: center;
+}
+@media (min-width: 640px) {
+  .profile-picture-inline {
+    float: left;
+    margin: 0 18px 12px 0;
+  }
+}
+@media (max-width: 639px) {
+  .profile-picture-inline {
+    float: none;
+    margin: 0 auto 16px auto;
+  }
 }
 
 .about-description {

@@ -88,8 +88,7 @@ export const AboutScreen: React.FC<AboutScreenProps> = ({ onBack, onOpenResume }
               mcAudio.playClick();
               onBack();
             }}
-            className="minecraft-button"
-            style={{ width: '320px', height: '44px' }}
+            className="minecraft-button w-full max-w-[320px] h-11 text-xs sm:text-sm"
           >
             Back to Main Menu
           </button>

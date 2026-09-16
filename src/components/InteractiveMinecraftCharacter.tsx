@@ -455,7 +455,16 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
       targetSteveYaw = targetHeadYaw * 0.25;
     };
 
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        onMouseMove({ clientX: touch.clientX, clientY: touch.clientY } as MouseEvent);
+      }
+    };
+
     window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchstart', onTouchMove, { passive: true });
 
     // 6. Animation Loop
     let animId: number;
@@ -498,6 +507,8 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchstart', onTouchMove);
       renderer.dispose();
       if (mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);

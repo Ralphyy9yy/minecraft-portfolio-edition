@@ -42,8 +42,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
         <div className="flex justify-center">
           <button
             onClick={handleStart}
-            className="minecraft-button"
-            style={{ width: '300px', height: '44px', fontSize: '14px' }}
+            className="minecraft-button w-full max-w-[300px] h-11 text-xs sm:text-sm"
           >
             Start Exploring!
           </button>

@@ -118,19 +118,17 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onBack }) => {
       {/* Bottom Multiplayer Buttons - always visible */}
       <div className="flex flex-col gap-3 flex-shrink-0 max-w-4xl w-full mx-auto pt-2 pb-5">
         {/* Row 1: 3 Buttons */}
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 max-w-3xl mx-auto w-full px-2">
           <button
             onClick={() => handleJoin()}
-            className="minecraft-button"
-            style={{ width: '260px', maxWidth: '32vw', height: '52px', fontSize: '14px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Join Server
           </button>
 
           <button
             onClick={handleDirectConnect}
-            className="minecraft-button"
-            style={{ width: '260px', maxWidth: '32vw', height: '52px', fontSize: '13px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Direct Connection
           </button>
@@ -140,38 +138,34 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onBack }) => {
               mcAudio.playClick();
               handleJoin();
             }}
-            className="minecraft-button"
-            style={{ width: '260px', maxWidth: '32vw', height: '52px', fontSize: '14px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Add Server
           </button>
         </div>
 
         {/* Row 2: 4 Buttons */}
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 max-w-3xl mx-auto w-full px-2">
           <button
             onClick={() => {
               mcAudio.playClick();
               handleDirectConnect();
             }}
-            className="minecraft-button"
-            style={{ width: '200px', maxWidth: '24vw', height: '52px', fontSize: '14px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Edit
           </button>
 
           <button
             onClick={handleDelete}
-            className="minecraft-button"
-            style={{ width: '200px', maxWidth: '24vw', height: '52px', fontSize: '14px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Delete
           </button>
 
           <button
             onClick={handleRefresh}
-            className="minecraft-button"
-            style={{ width: '200px', maxWidth: '24vw', height: '52px', fontSize: '14px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Refresh
           </button>
@@ -181,8 +175,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onBack }) => {
               mcAudio.playClick();
               onBack();
             }}
-            className="minecraft-button"
-            style={{ width: '200px', maxWidth: '24vw', height: '52px', fontSize: '14px' }}
+            className="minecraft-button w-full h-11 sm:h-12 text-xs sm:text-sm"
           >
             Cancel
           </button>

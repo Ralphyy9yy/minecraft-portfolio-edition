@@ -64,7 +64,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         </div>
 
         {/* Buttons List Container */}
-        <div className="menu-buttons-container">
+        <div className="menu-buttons-container w-full max-w-[400px] px-3">
           {/* Play Minecraft (Singleplayer demo) */}
           <MCButton
             size="main"
@@ -125,7 +125,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       </div>
 
       {/* Footer Info matching johncraft.dev */}
-      <div className="w-full max-w-5xl flex justify-between items-center text-xs text-gray-300 font-mono mc-text-shadow px-2">
+      <div className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] sm:text-xs text-gray-300 font-mono mc-text-shadow px-2 gap-1 pb-1">
         <div className="pl-2">Portfolio 1.20.4</div>
         <div className="text-right text-gray-400 pr-14">Copyright Mojang Studios. Do not distribute!</div>
       </div>

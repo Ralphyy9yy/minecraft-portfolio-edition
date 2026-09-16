@@ -604,6 +604,37 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
     window.addEventListener('mousemove', onMouseMove);
 
+    // Mobile Touch Drag Camera Look
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        lastTouchX = e.touches[0].clientX;
+        lastTouchY = e.touches[0].clientY;
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        const movementX = touch.clientX - lastTouchX;
+        const movementY = touch.clientY - lastTouchY;
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+
+        const sensitivity = 0.0035;
+        playerYaw -= movementX * sensitivity;
+        playerPitch -= movementY * sensitivity;
+        playerPitch = Math.max(-Math.PI / 2 + 0.04, Math.min(Math.PI / 2 - 0.04, playerPitch));
+
+        camera.rotation.set(0, 0, 0);
+        camera.rotation.order = 'YXZ';
+        camera.rotation.y = playerYaw;
+        camera.rotation.x = playerPitch;
+      }
+    };
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+
     const onPointerLockChange = () => {
       const locked = document.pointerLockElement === renderer.domElement;
       setIsLocked(locked);
@@ -897,6 +928,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       window.removeEventListener('resize', onResize);
       canvasDom.removeEventListener('mousedown', onMouseDown);
@@ -991,7 +1024,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
                   setSelectedSlot(idx);
                   mcAudio.playClick();
                 }}
-                className={`w-9 h-9 sm:w-10 sm:h-10 border-2 flex items-center justify-center relative cursor-pointer pointer-events-auto transition-transform ${
+                className={`w-7 h-7 sm:w-10 sm:h-10 border-2 flex items-center justify-center relative cursor-pointer pointer-events-auto transition-transform ${
                   isSelected
                     ? 'border-white bg-white/30 scale-110 shadow-lg z-10'
                     : 'border-[#373737] bg-[#8b8b8b]'
@@ -1004,10 +1037,10 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
                 title={`Slot ${idx + 1}: ${block.name}`}
               >
                 <div
-                  className="w-5 h-5 sm:w-6 sm:h-6 border border-black/40 shadow-sm"
+                  className="w-4 h-4 sm:w-6 sm:h-6 border border-black/40 shadow-sm"
                   style={{ backgroundColor: block.iconColor }}
                 />
-                <span className="absolute bottom-0.5 right-1 text-[9px] text-white font-mono drop-shadow-[1px_1px_0px_#000]">
+                <span className="absolute bottom-0.5 right-0.5 sm:right-1 text-[8px] sm:text-[9px] text-white font-mono drop-shadow-[1px_1px_0px_#000]">
                   {idx + 1}
                 </span>
               </div>
