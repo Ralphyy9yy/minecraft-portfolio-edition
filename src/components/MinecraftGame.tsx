@@ -176,6 +176,31 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
   const [selectedSlot, setSelectedSlot] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(() => {
+    return (
+      typeof window !== 'undefined' &&
+      ('ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth <= 820)
+    );
+  });
+  const [dpadActive, setDpadActive] = useState({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    jump: false,
+  });
+  const [isSprinting, setIsSprinting] = useState(false);
+
+  const performMineRef = useRef<() => void>(() => {});
+  const performPlaceRef = useRef<() => void>(() => {});
+  const mobileMoveRef = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    jump: false,
+    sprint: false,
+  });
 
   const selectedSlotRef = useRef(selectedSlot);
   selectedSlotRef.current = selectedSlot;
@@ -604,36 +629,59 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
     window.addEventListener('mousemove', onMouseMove);
 
-    // Mobile Touch Drag Camera Look
-    let lastTouchX = 0;
-    let lastTouchY = 0;
+    // Mobile Multi-Touch Drag Camera Look (Minecraft Pocket Edition touch tracking)
+    let lookTouchId: number | null = null;
+    let lastLookX = 0;
+    let lastLookY = 0;
+
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        lastTouchX = e.touches[0].clientX;
-        lastTouchY = e.touches[0].clientY;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        // Only bind look drag if touch is NOT on D-pad area (bottom-left)
+        const isDpadZone = t.clientX < 190 && t.clientY > window.innerHeight - 220;
+        if (lookTouchId === null && !isDpadZone) {
+          lookTouchId = t.identifier;
+          lastLookX = t.clientX;
+          lastLookY = t.clientY;
+        }
       }
     };
+
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        const touch = e.touches[0];
-        const movementX = touch.clientX - lastTouchX;
-        const movementY = touch.clientY - lastTouchY;
-        lastTouchX = touch.clientX;
-        lastTouchY = touch.clientY;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === lookTouchId) {
+          const movementX = t.clientX - lastLookX;
+          const movementY = t.clientY - lastLookY;
+          lastLookX = t.clientX;
+          lastLookY = t.clientY;
 
-        const sensitivity = 0.0035;
-        playerYaw -= movementX * sensitivity;
-        playerPitch -= movementY * sensitivity;
-        playerPitch = Math.max(-Math.PI / 2 + 0.04, Math.min(Math.PI / 2 - 0.04, playerPitch));
+          const sensitivity = 0.004;
+          playerYaw -= movementX * sensitivity;
+          playerPitch -= movementY * sensitivity;
+          playerPitch = Math.max(-Math.PI / 2 + 0.04, Math.min(Math.PI / 2 - 0.04, playerPitch));
 
-        camera.rotation.set(0, 0, 0);
-        camera.rotation.order = 'YXZ';
-        camera.rotation.y = playerYaw;
-        camera.rotation.x = playerPitch;
+          camera.rotation.set(0, 0, 0);
+          camera.rotation.order = 'YXZ';
+          camera.rotation.y = playerYaw;
+          camera.rotation.x = playerPitch;
+        }
       }
     };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === lookTouchId) {
+          lookTouchId = null;
+        }
+      }
+    };
+
     window.addEventListener('touchstart', onTouchStart, { passive: true });
     window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     const onPointerLockChange = () => {
       const locked = document.pointerLockElement === renderer.domElement;
@@ -654,85 +702,100 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     highlightMesh.visible = false;
     scene.add(highlightMesh);
 
-    // Mouse Actions (Mining & Placing)
-    const onMouseDown = (e: MouseEvent) => {
-      if (document.pointerLockElement !== renderer.domElement) {
-        renderer.domElement.requestPointerLock();
-        return;
-      }
-
+    // Actions: Mine Block & Place Block (supports desktop click & mobile PE buttons)
+    const performMine = () => {
       triggerPunch();
-
       raycaster.setFromCamera(screenCenter, camera);
       const intersects = raycaster.intersectObjects(blockGroup.children);
-
-      if (intersects.length > 0 && intersects[0].distance <= 5.5) {
+      if (intersects.length > 0 && intersects[0].distance <= 6.0) {
         const hit = intersects[0];
         const { voxelCoord, type } = hit.object.userData;
         if (!voxelCoord) return;
 
-        if (e.button === 0) {
-          // Left Click: Mine Block
-          const def = HOTBAR_BLOCKS.find((b) => b.type === type);
-          sfxEngine.playBreak(def?.soundType || 'stone');
-          spawnDebris(hit.point, type);
+        const def = HOTBAR_BLOCKS.find((b) => b.type === type);
+        sfxEngine.playBreak(def?.soundType || 'stone');
+        spawnDebris(hit.point, type);
 
-          worldMap.delete(getCoordKey(voxelCoord.x, voxelCoord.y, voxelCoord.z));
-          blockGroup.remove(hit.object);
+        worldMap.delete(getCoordKey(voxelCoord.x, voxelCoord.y, voxelCoord.z));
+        blockGroup.remove(hit.object);
 
-          // Reveal adjacent blocks
-          const neighbors = [
-            [voxelCoord.x + 1, voxelCoord.y, voxelCoord.z],
-            [voxelCoord.x - 1, voxelCoord.y, voxelCoord.z],
-            [voxelCoord.x, voxelCoord.y + 1, voxelCoord.z],
-            [voxelCoord.x, voxelCoord.y - 1, voxelCoord.z],
-            [voxelCoord.x, voxelCoord.y, voxelCoord.z + 1],
-            [voxelCoord.x, voxelCoord.y, voxelCoord.z - 1],
-          ];
-          neighbors.forEach(([nx, ny, nz]) => {
-            const key = getCoordKey(nx, ny, nz);
-            const block = worldMap.get(key);
-            if (block && block.type !== BlockType.AIR && !block.mesh) {
-              block.mesh = spawnMeshForVoxel(nx, ny, nz, block.type);
-            }
-          });
-        } else if (e.button === 2) {
-          // Right Click: Place Block
-          if (!hit.face) return;
-          const placeX = voxelCoord.x + Math.round(hit.face.normal.x);
-          const placeY = voxelCoord.y + Math.round(hit.face.normal.y);
-          const placeZ = voxelCoord.z + Math.round(hit.face.normal.z);
-
-          // Player collision test (prevent placing inside player)
-          const pMinX = playerPos.x - 0.35;
-          const pMaxX = playerPos.x + 0.35;
-          const pMinY = playerPos.y - 1.5;
-          const pMaxY = playerPos.y + 0.3;
-          const pMinZ = playerPos.z - 0.35;
-          const pMaxZ = playerPos.z + 0.35;
-
-          const bMinX = placeX - 0.5;
-          const bMaxX = placeX + 0.5;
-          const bMinY = placeY - 0.5;
-          const bMaxY = placeY + 0.5;
-          const bMinZ = placeZ - 0.5;
-          const bMaxZ = placeZ + 0.5;
-
-          const collidesWithPlayer =
-            pMinX < bMaxX && pMaxX > bMinX &&
-            pMinY < bMaxY && pMaxY > bMinY &&
-            pMinZ < bMaxZ && pMaxZ > bMinZ;
-
-          if (collidesWithPlayer) return;
-
-          const placeKey = getCoordKey(placeX, placeY, placeZ);
-          if (!worldMap.has(placeKey)) {
-            const selectedDef = HOTBAR_BLOCKS[selectedSlotRef.current];
-            sfxEngine.playPlace();
-            const newMesh = spawnMeshForVoxel(placeX, placeY, placeZ, selectedDef.type);
-            worldMap.set(placeKey, { type: selectedDef.type, mesh: newMesh });
+        // Reveal adjacent blocks
+        const neighbors = [
+          [voxelCoord.x + 1, voxelCoord.y, voxelCoord.z],
+          [voxelCoord.x - 1, voxelCoord.y, voxelCoord.z],
+          [voxelCoord.x, voxelCoord.y + 1, voxelCoord.z],
+          [voxelCoord.x, voxelCoord.y - 1, voxelCoord.z],
+          [voxelCoord.x, voxelCoord.y, voxelCoord.z + 1],
+          [voxelCoord.x, voxelCoord.y, voxelCoord.z - 1],
+        ];
+        neighbors.forEach(([nx, ny, nz]) => {
+          const key = getCoordKey(nx, ny, nz);
+          const block = worldMap.get(key);
+          if (block && block.type !== BlockType.AIR && !block.mesh) {
+            block.mesh = spawnMeshForVoxel(nx, ny, nz, block.type);
           }
+        });
+      }
+    };
+
+    const performPlace = () => {
+      triggerPunch();
+      raycaster.setFromCamera(screenCenter, camera);
+      const intersects = raycaster.intersectObjects(blockGroup.children);
+      if (intersects.length > 0 && intersects[0].distance <= 6.0) {
+        const hit = intersects[0];
+        const { voxelCoord } = hit.object.userData;
+        if (!voxelCoord || !hit.face) return;
+
+        const placeX = voxelCoord.x + Math.round(hit.face.normal.x);
+        const placeY = voxelCoord.y + Math.round(hit.face.normal.y);
+        const placeZ = voxelCoord.z + Math.round(hit.face.normal.z);
+
+        // Player collision test (prevent placing inside player)
+        const pMinX = playerPos.x - 0.35;
+        const pMaxX = playerPos.x + 0.35;
+        const pMinY = playerPos.y - 1.5;
+        const pMaxY = playerPos.y + 0.3;
+        const pMinZ = playerPos.z - 0.35;
+        const pMaxZ = playerPos.z + 0.35;
+
+        const bMinX = placeX - 0.5;
+        const bMaxX = placeX + 0.5;
+        const bMinY = placeY - 0.5;
+        const bMaxY = placeY + 0.5;
+        const bMinZ = placeZ - 0.5;
+        const bMaxZ = placeZ + 0.5;
+
+        const collidesWithPlayer =
+          pMinX < bMaxX && pMaxX > bMinX &&
+          pMinY < bMaxY && pMaxY > bMinY &&
+          pMinZ < bMaxZ && pMaxZ > bMinZ;
+
+        if (collidesWithPlayer) return;
+
+        const placeKey = getCoordKey(placeX, placeY, placeZ);
+        if (!worldMap.has(placeKey)) {
+          const selectedDef = HOTBAR_BLOCKS[selectedSlotRef.current];
+          sfxEngine.playPlace();
+          const newMesh = spawnMeshForVoxel(placeX, placeY, placeZ, selectedDef.type);
+          worldMap.set(placeKey, { type: selectedDef.type, mesh: newMesh });
         }
+      }
+    };
+
+    performMineRef.current = performMine;
+    performPlaceRef.current = performPlace;
+
+    // Mouse Actions (Mining & Placing)
+    const onMouseDown = (e: MouseEvent) => {
+      if (!isTouchDevice && document.pointerLockElement !== renderer.domElement) {
+        renderer.domElement.requestPointerLock();
+        return;
+      }
+      if (e.button === 0) {
+        performMine();
+      } else if (e.button === 2) {
+        performPlace();
       }
     };
 
@@ -807,13 +870,20 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         }
       }
 
-      // Movement Input
-      const speed = keys['ControlLeft'] || keys['KeyR'] ? 8.5 : 5.8; // Sprint support
+      // Movement Input (WASD or Mobile PE D-Pad)
+      const isForward = keys['KeyW'] || mobileMoveRef.current.forward;
+      const isBackward = keys['KeyS'] || mobileMoveRef.current.backward;
+      const isLeft = keys['KeyA'] || mobileMoveRef.current.left;
+      const isRight = keys['KeyD'] || mobileMoveRef.current.right;
+      const isJumping = keys['Space'] || mobileMoveRef.current.jump;
+      const isSprinting = keys['ControlLeft'] || keys['KeyR'] || mobileMoveRef.current.sprint;
+
+      const speed = isSprinting ? 8.5 : 5.8; // Sprint support
       const moveDir = new THREE.Vector3();
-      if (keys['KeyW']) moveDir.z -= 1;
-      if (keys['KeyS']) moveDir.z += 1;
-      if (keys['KeyA']) moveDir.x -= 1;
-      if (keys['KeyD']) moveDir.x += 1;
+      if (isForward) moveDir.z -= 1;
+      if (isBackward) moveDir.z += 1;
+      if (isLeft) moveDir.x -= 1;
+      if (isRight) moveDir.x += 1;
 
       const isMoving = moveDir.lengthSq() > 0;
       if (isMoving) {
@@ -830,7 +900,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       playerVelocity.y -= 22 * delta;
 
       // Jump
-      if (keys['Space'] && isOnGround) {
+      if (isJumping && isOnGround) {
         playerVelocity.y = 8.2;
         isOnGround = false;
       }
@@ -920,6 +990,9 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      setIsTouchDevice(
+        'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth <= 820
+      );
     };
     window.addEventListener('resize', onResize);
 
@@ -930,6 +1003,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       window.removeEventListener('resize', onResize);
       canvasDom.removeEventListener('mousedown', onMouseDown);
@@ -967,7 +1042,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       <div ref={containerRef} className="w-full h-full cursor-none" />
 
       {/* Inverted Minecraft Crosshair */}
-      {isLocked && !isPaused && (
+      {!isPaused && (isLocked || isTouchDevice) && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
           <div
             className="w-4 h-4 flex items-center justify-center text-white text-2xl font-bold select-none"
@@ -978,8 +1053,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         </div>
       )}
 
-      {/* Click to Play / Resume Prompt */}
-      {!isLocked && !isPaused && (
+      {/* Click to Play / Resume Prompt (Desktop PC only) */}
+      {!isTouchDevice && !isLocked && !isPaused && (
         <div
           onClick={resumeGame}
           className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/50 cursor-pointer"
@@ -996,15 +1071,238 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         </div>
       )}
 
+      {/* Top Bar: Pause Button & Mode Switch */}
+      {!isPaused && (
+        <>
+          {/* Minecraft PE Center Top Pause Button */}
+          <button
+            onClick={() => {
+              mcAudio.playClick();
+              setIsPaused(true);
+            }}
+            className="fixed top-3 left-1/2 -translate-x-1/2 z-30 pe-button px-3 py-1.5 rounded text-xs font-bold pointer-events-auto"
+            title="Pause Game"
+          >
+            ❚❚ PAUSE
+          </button>
+
+          {/* Desktop/Touch Mode Toggle */}
+          <button
+            onClick={() => {
+              mcAudio.playClick();
+              setIsTouchDevice((v) => !v);
+            }}
+            className="fixed top-3 right-3 z-30 pe-button px-2.5 py-1 text-[10px] rounded pointer-events-auto"
+            title="Toggle between Mobile Pocket Edition and Desktop PC controls"
+          >
+            {isTouchDevice ? '📱 Mobile PE' : '💻 PC Controls'}
+          </button>
+        </>
+      )}
+
+      {/* Minecraft Pocket Edition (PE) On-Screen Touch Controls */}
+      {isTouchDevice && !isPaused && (
+        <>
+          {/* Bottom-Left: Authentic Minecraft PE D-Pad */}
+          <div className="fixed bottom-3 left-2 sm:bottom-6 sm:left-6 z-30 select-none pe-dpad-container pointer-events-auto">
+            {/* Row 1: [Empty] [▲ Forward] [Empty] */}
+            <div />
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.forward = true;
+                setDpadActive((p) => ({ ...p, forward: true }));
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.forward = false;
+                setDpadActive((p) => ({ ...p, forward: false }));
+              }}
+              onPointerLeave={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.forward = false;
+                setDpadActive((p) => ({ ...p, forward: false }));
+              }}
+              onPointerCancel={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.forward = false;
+                setDpadActive((p) => ({ ...p, forward: false }));
+              }}
+              className={`pe-button rounded-t ${dpadActive.forward ? 'active' : ''}`}
+              title="Move Forward"
+            >
+              ▲
+            </button>
+            <div />
+
+            {/* Row 2: [◄ Left] [⬥ Center Sneak/Sprint] [► Right] */}
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.left = true;
+                setDpadActive((p) => ({ ...p, left: true }));
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.left = false;
+                setDpadActive((p) => ({ ...p, left: false }));
+              }}
+              onPointerLeave={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.left = false;
+                setDpadActive((p) => ({ ...p, left: false }));
+              }}
+              onPointerCancel={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.left = false;
+                setDpadActive((p) => ({ ...p, left: false }));
+              }}
+              className={`pe-button rounded-l ${dpadActive.left ? 'active' : ''}`}
+              title="Strafe Left"
+            >
+              ◄
+            </button>
+
+            <button
+              onClick={() => {
+                mcAudio.playClick();
+                const nextSprint = !mobileMoveRef.current.sprint;
+                mobileMoveRef.current.sprint = nextSprint;
+                setIsSprinting(nextSprint);
+              }}
+              className={`pe-button ${isSprinting ? 'bg-amber-400/60 text-amber-200' : ''}`}
+              title={isSprinting ? 'Sprinting (Tap to Walk)' : 'Walking (Tap to Sprint)'}
+            >
+              {isSprinting ? '⚡' : '⬥'}
+            </button>
+
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.right = true;
+                setDpadActive((p) => ({ ...p, right: true }));
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.right = false;
+                setDpadActive((p) => ({ ...p, right: false }));
+              }}
+              onPointerLeave={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.right = false;
+                setDpadActive((p) => ({ ...p, right: false }));
+              }}
+              onPointerCancel={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.right = false;
+                setDpadActive((p) => ({ ...p, right: false }));
+              }}
+              className={`pe-button rounded-r ${dpadActive.right ? 'active' : ''}`}
+              title="Strafe Right"
+            >
+              ►
+            </button>
+
+            {/* Row 3: [Empty] [▼ Backward] [Empty] */}
+            <div />
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.backward = true;
+                setDpadActive((p) => ({ ...p, backward: true }));
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.backward = false;
+                setDpadActive((p) => ({ ...p, backward: false }));
+              }}
+              onPointerLeave={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.backward = false;
+                setDpadActive((p) => ({ ...p, backward: false }));
+              }}
+              onPointerCancel={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.backward = false;
+                setDpadActive((p) => ({ ...p, backward: false }));
+              }}
+              className={`pe-button rounded-b ${dpadActive.backward ? 'active' : ''}`}
+              title="Move Backward"
+            >
+              ▼
+            </button>
+            <div />
+          </div>
+
+          {/* Bottom-Right: Action Buttons & Round Jump Button */}
+          <div className="fixed bottom-3 right-2 sm:bottom-6 sm:right-6 z-30 select-none flex flex-col items-end gap-2 pointer-events-auto">
+            {/* Quick Action Buttons: Mine & Place */}
+            <div className="flex gap-2">
+              <button
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  performMineRef.current();
+                }}
+                className="pe-action-btn bg-red-950/70 border-2 border-red-500/80 active:bg-red-700/80 text-white"
+                title="Mine / Break Block"
+              >
+                <span className="text-base sm:text-lg">⛏️</span>
+                <span className="text-[8px] sm:text-[9px] font-bold tracking-tight">MINE</span>
+              </button>
+
+              <button
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  performPlaceRef.current();
+                }}
+                className="pe-action-btn bg-emerald-950/70 border-2 border-emerald-500/80 active:bg-emerald-700/80 text-white"
+                title="Place Block"
+              >
+                <span className="text-base sm:text-lg">🧱</span>
+                <span className="text-[8px] sm:text-[9px] font-bold tracking-tight">PLACE</span>
+              </button>
+            </div>
+
+            {/* Classic Minecraft PE Jump Button */}
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.jump = true;
+                setDpadActive((p) => ({ ...p, jump: true }));
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.jump = false;
+                setDpadActive((p) => ({ ...p, jump: false }));
+              }}
+              onPointerLeave={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.jump = false;
+                setDpadActive((p) => ({ ...p, jump: false }));
+              }}
+              onPointerCancel={(e) => {
+                e.preventDefault();
+                mobileMoveRef.current.jump = false;
+                setDpadActive((p) => ({ ...p, jump: false }));
+              }}
+              className={`pe-jump-btn ${dpadActive.jump ? 'active' : ''}`}
+              title="Jump"
+            >
+              ▲
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Authentic Minecraft In-Game HUD */}
-      <div className="absolute bottom-3 inset-x-0 flex flex-col items-center pointer-events-none z-20">
+      <div className="absolute bottom-2 sm:bottom-3 inset-x-0 flex flex-col items-center pointer-events-none z-20 px-2">
         {/* Selected block label */}
-        <div className="text-white text-xs mc-text-shadow font-bold mb-2">
+        <div className="text-white text-xs mc-text-shadow font-bold mb-1.5">
           {HOTBAR_BLOCKS[selectedSlot]?.name}
         </div>
 
         {/* Health & Hunger Bars */}
-        <div className="w-[360px] max-w-[90vw] flex justify-between px-1 mb-1 text-sm select-none">
+        <div className="w-[340px] max-w-[90vw] flex justify-between px-1 mb-1 text-xs sm:text-sm select-none">
           <div className="flex gap-0.5" title="10/10 Hearts">
             {'❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️'}
           </div>
@@ -1014,7 +1312,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         </div>
 
         {/* 9-Slot Hotbar */}
-        <div className="flex bg-[#8f8f8f] p-1 border-3 border-black shadow-[inset_-2px_-2px_0px_#555,inset_2px_2px_0px_#fff]">
+        <div className="flex bg-[#8f8f8f] p-0.5 sm:p-1 border-2 sm:border-3 border-black shadow-[inset_-2px_-2px_0px_#555,inset_2px_2px_0px_#fff] max-w-full overflow-x-auto">
           {HOTBAR_BLOCKS.map((block, idx) => {
             const isSelected = idx === selectedSlot;
             return (
@@ -1026,7 +1324,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
                 }}
                 className={`w-7 h-7 sm:w-10 sm:h-10 border-2 flex items-center justify-center relative cursor-pointer pointer-events-auto transition-transform ${
                   isSelected
-                    ? 'border-white bg-white/30 scale-110 shadow-lg z-10'
+                    ? 'border-white bg-white/30 scale-105 sm:scale-110 shadow-lg z-10'
                     : 'border-[#373737] bg-[#8b8b8b]'
                 }`}
                 style={{
@@ -1049,8 +1347,10 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         </div>
 
         {/* Control Hints */}
-        <div className="text-[10px] text-gray-300 mc-text-shadow mt-1">
-          WASD: Move • Space: Jump • Left Click: Mine • Right Click: Place • 1-9: Hotbar • ESC: Pause
+        <div className="text-[9px] sm:text-[10px] text-gray-300 mc-text-shadow mt-1 text-center">
+          {isTouchDevice
+            ? 'D-Pad: Move • Swipe right side: Look • ⛏️ Mine • 🧱 Place • ▲ Jump'
+            : 'WASD: Move • Space: Jump • Left Click: Mine • Right Click: Place • 1-9: Hotbar • ESC: Pause'}
         </div>
       </div>
 

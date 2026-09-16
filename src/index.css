@@ -505,3 +505,104 @@ textarea,
   background: #8b8b8b;
 }
 
+/* Minecraft Pocket Edition (PE) Mobile Touch Controls */
+.pe-dpad-container {
+  display: grid;
+  grid-template-columns: repeat(3, 46px);
+  grid-template-rows: repeat(3, 46px);
+  gap: 2px;
+  user-select: none;
+  touch-action: none;
+}
+@media (min-width: 480px) {
+  .pe-dpad-container {
+    grid-template-columns: repeat(3, 52px);
+    grid-template-rows: repeat(3, 52px);
+    gap: 3px;
+  }
+}
+
+.pe-button {
+  background: rgba(45, 45, 45, 0.7);
+  border: 2px solid #000;
+  box-shadow: inset 2px 2px 0px rgba(255, 255, 255, 0.35), inset -2px -2px 0px rgba(0, 0, 0, 0.7);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  user-select: none;
+  touch-action: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.08s ease;
+}
+
+.pe-button:active, .pe-button.active {
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset -2px -2px 0px rgba(255, 255, 255, 0.35), inset 2px 2px 0px rgba(0, 0, 0, 0.7);
+  color: #ffffa0;
+}
+
+.pe-action-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  box-shadow: inset 2px 2px 0px rgba(255, 255, 255, 0.4), inset -2px -2px 0px rgba(0, 0, 0, 0.8), 0 4px 10px rgba(0,0,0,0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease, background 0.08s ease;
+}
+@media (min-width: 480px) {
+  .pe-action-btn {
+    width: 58px;
+    height: 58px;
+  }
+}
+
+.pe-action-btn:active, .pe-action-btn.active {
+  box-shadow: inset -2px -2px 0px rgba(255, 255, 255, 0.4), inset 2px 2px 0px rgba(0, 0, 0, 0.8);
+  transform: scale(0.95);
+}
+
+.pe-jump-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(45, 45, 45, 0.75);
+  border: 3px solid #000;
+  box-shadow: inset 2px 2px 0px rgba(255, 255, 255, 0.45), inset -2px -2px 0px rgba(0, 0, 0, 0.85), 0 4px 12px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #fff;
+  user-select: none;
+  touch-action: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease, background 0.08s ease;
+}
+@media (min-width: 480px) {
+  .pe-jump-btn {
+    width: 68px;
+    height: 68px;
+    font-size: 30px;
+  }
+}
+
+.pe-jump-btn:active, .pe-jump-btn.active {
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset -2px -2px 0px rgba(255, 255, 255, 0.45), inset 2px 2px 0px rgba(0, 0, 0, 0.85);
+  color: #ffffa0;
+  transform: scale(0.95);
+}
+
