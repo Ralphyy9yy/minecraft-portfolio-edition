@@ -41,7 +41,7 @@ export const App: React.FC = () => {
         <button
           onClick={handleToggleMute}
           title={isMuted ? "Audio is Muted (Click to Unmute)" : "Audio is Playing (Click to Mute)"}
-          className="minecraft-button audio-toggle-button text-white fixed top-8 left-10 z-[9999]"
+          className="minecraft-button audio-toggle-button text-white fixed top-3 left-3 sm:top-5 sm:left-5 z-[9999]"
           style={{ zIndex: 9999 }}
           aria-label="Toggle Mute"
         >

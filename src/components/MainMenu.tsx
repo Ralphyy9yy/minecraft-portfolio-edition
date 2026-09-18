@@ -43,28 +43,28 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       </div>
 
       {/* Main Title Logo & Splash Area */}
-      <div className="flex flex-col items-center my-auto -mt-2">
-        <div className="relative flex flex-col items-center mb-8">
+      <div className="flex flex-col items-center my-auto w-full">
+        <div className="relative flex flex-col items-center mb-6 sm:mb-8">
           <img
             src="/images/title/minecraft_title.png"
             alt="Minecraft Title"
-            className="minecraft-title-image max-h-[140px] sm:max-h-[175px] pointer-events-none"
+            className="minecraft-title-image max-h-[110px] sm:max-h-[160px] pointer-events-none"
           />
 
-          {/* Splash Text - placed on the right of the Minecraft logo, safely above the buttons */}
+          {/* Splash Text - placed on the bottom right of the Minecraft logo, never covering title text */}
           <div
             onClick={cycleSplash}
-            className="absolute top-8 sm:top-12 right-0 sm:right-4 transform cursor-pointer select-none z-20 group"
+            className="absolute -bottom-2 sm:bottom-1 right-2 sm:right-6 transform cursor-pointer select-none z-20 group"
             title="Click for next quote!"
           >
-            <span className="minecraft-splash whitespace-nowrap block drop-shadow-[2px_2px_0px_#3f3f00] text-sm sm:text-base">
+            <span className="minecraft-splash whitespace-nowrap block drop-shadow-[2px_2px_0px_#3f3f00] text-[11px] sm:text-[13px] md:text-sm">
               {splashes[splashIndex]}
             </span>
           </div>
         </div>
 
         {/* Buttons List Container */}
-        <div className="menu-buttons-container w-full max-w-[400px] px-3">
+        <div className="menu-buttons-container w-full max-w-[340px] sm:max-w-[400px] px-2 sm:px-3">
           {/* Play Minecraft (Singleplayer demo) */}
           <MCButton
             size="main"
@@ -95,10 +95,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           </MCButton>
 
           {/* Bottom Dual Row */}
-          <div className="flex items-center gap-2 mt-2 max-w-[400px] w-full justify-center">
+          <div className="flex items-center gap-2 mt-1 sm:mt-2 max-w-[340px] sm:max-w-[400px] w-full justify-between">
             <MCButton
               size="small"
               onClick={onOpenResume}
+              className="flex-1"
             >
               Resume...
             </MCButton>
@@ -106,6 +107,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             <MCButton
               size="small"
               onClick={onOpenContact}
+              className="flex-1"
             >
               Contact Me
             </MCButton>
@@ -118,16 +120,16 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               title="Change Splash / Language"
               className="minecraft-button language-button flex-shrink-0"
             >
-              <img src="/images/lang.png" alt="Language" className="w-6 h-6 object-contain" />
+              <img src="/images/lang.png" alt="Language" className="w-5 h-5 sm:w-6 sm:h-6 object-contain" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Footer Info matching johncraft.dev */}
-      <div className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] sm:text-xs text-gray-300 font-mono mc-text-shadow px-2 gap-1 pb-1">
-        <div className="pl-2">Portfolio 1.20.4</div>
-        <div className="text-right text-gray-400 pr-14">Copyright Mojang Studios. Do not distribute!</div>
+      {/* Footer Info */}
+      <div className="w-full max-w-5xl flex justify-between items-center text-[10px] sm:text-xs text-gray-300 font-mono mc-text-shadow px-3 pb-1">
+        <div>Portfolio 1.20.4</div>
+        <div className="text-right text-gray-400">Mojang Studios</div>
       </div>
     </div>
   );
