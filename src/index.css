@@ -207,15 +207,21 @@ textarea,
 .minecraft-splash {
   color: #ffff55;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 11px;
   text-shadow: 2px 2px 0px #3f3f00;
   animation: splash 1.5s ease-in-out infinite alternate;
-  transform-origin: center center;
+  transform-origin: bottom right;
+  display: inline-block;
+}
+@media (min-width: 640px) {
+  .minecraft-splash {
+    font-size: 14px;
+  }
 }
 
 @keyframes splash {
   0% { transform: rotate(-20deg) scale(1); }
-  100% { transform: rotate(-18deg) scale(1.08); }
+  100% { transform: rotate(-18deg) scale(1.05); }
 }
 
 /* Menu button containers */

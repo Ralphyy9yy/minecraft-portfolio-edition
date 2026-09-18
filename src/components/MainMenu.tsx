@@ -44,20 +44,20 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
       {/* Main Title Logo & Splash Area */}
       <div className="flex flex-col items-center my-auto w-full">
-        <div className="relative flex flex-col items-center mb-6 sm:mb-8">
+        <div className="relative flex flex-col items-center mb-8 sm:mb-10">
           <img
             src="/images/title/minecraft_title.png"
             alt="Minecraft Title"
             className="minecraft-title-image max-h-[110px] sm:max-h-[160px] pointer-events-none"
           />
 
-          {/* Splash Text - placed on the bottom right of the Minecraft logo, never covering title text */}
+          {/* Splash Text - placed neatly above the buttons at the bottom-right of the logo */}
           <div
             onClick={cycleSplash}
-            className="absolute -bottom-2 sm:bottom-1 right-2 sm:right-6 transform cursor-pointer select-none z-20 group"
+            className="absolute bottom-2 sm:bottom-4 right-1 sm:right-6 transform cursor-pointer select-none z-20 group"
             title="Click for next quote!"
           >
-            <span className="minecraft-splash whitespace-nowrap block drop-shadow-[2px_2px_0px_#3f3f00] text-[11px] sm:text-[13px] md:text-sm">
+            <span className="minecraft-splash whitespace-nowrap block drop-shadow-[2px_2px_0px_#3f3f00]">
               {splashes[splashIndex]}
             </span>
           </div>
