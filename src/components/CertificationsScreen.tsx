@@ -17,9 +17,9 @@ export const CertificationsScreen: React.FC<CertificationsScreenProps> = ({ onBa
   };
 
   return (
-    <div className="relative z-10 flex flex-col min-h-screen p-3 sm:p-6 select-none overflow-y-auto">
+    <div className="relative z-10 flex flex-col h-screen max-h-screen p-3 sm:p-6 select-none overflow-hidden">
       {/* Header */}
-      <div className="text-center mb-2">
+      <div className="text-center mb-2 flex-shrink-0">
         <h1 className="text-2xl sm:text-3xl font-bold text-white mc-text-shadow tracking-wide">
           My Certifications
         </h1>
@@ -29,8 +29,8 @@ export const CertificationsScreen: React.FC<CertificationsScreenProps> = ({ onBa
         </div>
       </div>
 
-      {/* Realms Grid */}
-      <div className="flex-1 max-w-5xl w-full mx-auto my-4">
+      {/* Realms Grid - Scrollable */}
+      <div className="flex-1 overflow-y-auto max-w-5xl w-full mx-auto my-2 px-1">
         <div className="realms-grid">
           {certs.map((cert) => (
             <div
@@ -70,8 +70,8 @@ export const CertificationsScreen: React.FC<CertificationsScreenProps> = ({ onBa
         </div>
       </div>
 
-      {/* Back Button */}
-      <div className="flex justify-center mt-auto mb-4">
+      {/* Back Button - elevated above bottom edge */}
+      <div className="flex justify-center flex-shrink-0 pt-2 pb-6 sm:pb-8">
         <button
           onClick={() => {
             mcAudio.playClick();

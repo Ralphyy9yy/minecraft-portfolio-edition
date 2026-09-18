@@ -442,7 +442,7 @@ textarea,
 .realm-image {
   position: relative;
   width: 100%;
-  height: 150px;
+  height: 120px;
   background: linear-gradient(45deg, #1e3a8a, #3b82f6, #60a5fa);
   border: 3px solid #1f2937;
   margin-bottom: 6px;
@@ -450,6 +450,11 @@ textarea,
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+@media (min-width: 640px) {
+  .realm-image {
+    height: 150px;
+  }
 }
 
 .realm-card:hover .realm-image {
