@@ -1,16 +1,19 @@
 # RalphCraft Portfolio
 
-An interactive Minecraft-inspired developer portfolio built with React, TypeScript, Three.js, and Tailwind CSS. The site presents projects, certifications, contact details, and a resume through a game-style interface with audio, animated backgrounds, and a playable experience.
+An interactive Minecraft-inspired developer portfolio built with React, TypeScript, Three.js, and Tailwind CSS. The site presents projects, contact details, and a PDF resume through a game-style interface with audio, animated backgrounds, and a playable experience.
 
 ## Features
 
 - Minecraft-inspired welcome screen and main menu
-- About, projects, and certifications sections
+- Projects-first navigation with featured case studies for ALERTU, BugReplay, and this portfolio
+- About screen, project source links, and live demos where available
 - Interactive resume viewer and contact modal
 - Three.js-powered visual elements
 - Playable Minecraft-style experience with a world-generation screen
 - Background music, sound effects, and global mute controls
-- Responsive, component-based interface
+- Responsive scrolling, readable body text, keyboard focus indicators, and reduced-motion support
+- Accessible dialogs with focus containment, Escape dismissal, and focus restoration
+- Game and About screens load on demand to keep Three.js out of the initial JavaScript download
 
 ## Tech Stack
 
@@ -37,8 +40,8 @@ Install the following tools before running the project:
 Clone the repository and install its dependencies:
 
 ```bash
-git clone https://github.com/Ralphyy9yy/minecraft-portfolio.git
-cd minecraft-portfolio
+git clone https://github.com/Ralphyy9yy/minecraft-portfolio-edition.git
+cd minecraft-portfolio-edition
 npm install
 ```
 
@@ -55,6 +58,7 @@ Open the local URL shown in the terminal, normally `http://localhost:5173`.
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Starts the Vite development server with hot reload. |
+| `npm test` | Checks project links, featured project rendering, identity, and local media references without opening a browser. |
 | `npm run build` | Type-checks the project and creates an optimized production build in `dist/`. |
 | `npm run preview` | Serves the production build locally for verification. |
 
@@ -81,9 +85,13 @@ minecraft-portfolio/
 Most personal content is stored in `src/data/portfolioData.ts`. Update that file to change:
 
 - Name, title, contact information, and social links
-- Projects and their technology stacks
-- Certifications
-- Resume summary, skills, experience, and education
+- Projects, technology stacks, source links, and optional live demo links
+- Featured case studies (projects with a `caseStudy` entry appear first)
+- Resume PDF path and download filename
+
+Replace `public/Ralph_Giann_Suquib_CV.pdf` to update the downloadable resume. No generated employment history or sample certifications are displayed. The contact form opens an email draft in the visitor's email app; it does not submit messages to a backend.
+
+Project images in `public/images/projects/` come from the corresponding public project repositories: ALERTU's Android app icon and BugReplay's terminal preview. Image captions distinguish screenshots from artwork.
 
 Static images and audio are located in `public/`. Keep referenced filenames unchanged, or update their paths in the corresponding components and data entries.
 

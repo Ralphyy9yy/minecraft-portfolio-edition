@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { PORTFOLIO_DATA } from '../data/portfolioData';
 import { mcAudio } from '../utils/audio';
 import { InteractiveMinecraftCharacter } from './InteractiveMinecraftCharacter';
@@ -11,32 +11,34 @@ interface AboutScreenProps {
 export const AboutScreen: React.FC<AboutScreenProps> = ({ onBack, onOpenResume }) => {
   const dev = PORTFOLIO_DATA.developer;
   const links = PORTFOLIO_DATA.socialLinks;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const handleLinkClick = (url: string) => {
     mcAudio.playClick();
     if (url === '#resume') {
       onOpenResume();
     } else {
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 
   return (
-    <div className="relative z-10 flex flex-col h-screen max-h-screen select-none overflow-hidden">
+    <div className="relative z-10 flex flex-col h-full min-h-0 select-none overflow-hidden">
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 pt-4 pb-20">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pt-20 pb-10">
         {/* Header */}
         <div className="text-center mb-3">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mc-text-shadow tracking-wide mb-1">
+          <h1 ref={headingRef} tabIndex={-1} className="text-2xl sm:text-3xl font-bold text-white mc-text-shadow tracking-wide mb-1">
             About Me
           </h1>
-          <p className="text-xs text-gray-300 mc-text-shadow">
+          <p className="reading-text text-sm text-gray-300 mc-text-shadow">
             Explore my profile &amp; journey
           </p>
         </div>
 
         {/* About Description with Profile Picture */}
-        <div className="about-description text-xs sm:text-sm text-gray-200 leading-relaxed max-w-2xl w-full mx-auto">
+        <div className="about-description reading-text text-sm sm:text-base text-gray-200 leading-relaxed max-w-2xl w-full mx-auto">
           <div className="profile-picture-inline">
             <div className="profile-picture-small flex items-center justify-center bg-black/60 overflow-hidden relative">
               <InteractiveMinecraftCharacter />
@@ -56,28 +58,29 @@ export const AboutScreen: React.FC<AboutScreenProps> = ({ onBack, onOpenResume }
         {/* Linktree Container */}
         <div className="linktree-container">
           {links.map((link) => (
-            <div
+            <button
+              type="button"
               key={link.id}
               onClick={() => handleLinkClick(link.url)}
               className="linktree-item group"
             >
-              <div className="linktree-icon text-xl sm:text-2xl">
+              <span className="linktree-icon text-xl sm:text-2xl" aria-hidden="true">
                 {link.icon}
-              </div>
+              </span>
 
-              <div className="linktree-info">
-                <div className="linktree-name">
+              <span className="linktree-info">
+                <span className="linktree-name block">
                   {link.name}
-                </div>
-                <div className="linktree-description">
+                </span>
+                <span className="linktree-description reading-text block">
                   {link.description}
-                </div>
-              </div>
+                </span>
+              </span>
 
-              <div className="linktree-arrow group-hover:translate-x-1 transition-transform">
+              <span className="linktree-arrow group-hover:translate-x-1 transition-transform" aria-hidden="true">
                 ➔
-              </div>
-            </div>
+              </span>
+            </button>
           ))}
         </div>
 

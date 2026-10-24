@@ -9,6 +9,7 @@ export const WorldGenScreen: React.FC<WorldGenScreenProps> = ({ onComplete }) =>
 
   useEffect(() => {
     let animFrame: number;
+    let completionTimeout: ReturnType<typeof setTimeout> | undefined;
     const start = Date.now();
     const duration = 2000; // 2 seconds
 
@@ -20,12 +21,15 @@ export const WorldGenScreen: React.FC<WorldGenScreenProps> = ({ onComplete }) =>
       if (pct < 100) {
         animFrame = requestAnimationFrame(update);
       } else {
-        setTimeout(onComplete, 300);
+        completionTimeout = setTimeout(onComplete, 300);
       }
     };
 
     animFrame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(animFrame);
+    return () => {
+      cancelAnimationFrame(animFrame);
+      clearTimeout(completionTimeout);
+    };
   }, [onComplete]);
 
   return (

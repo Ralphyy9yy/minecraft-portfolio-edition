@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PORTFOLIO_DATA } from '../data/portfolioData';
 import { mcAudio } from '../utils/audio';
+import { useDialog } from '../hooks/useDialog';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -12,37 +13,39 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
-  const [isSent, setIsSent] = useState(false);
+  const [isDraftPrepared, setIsDraftPrepared] = useState(false);
+  const closeDialog = () => { setIsDraftPrepared(false); onClose(); };
+  const dialogRef = useDialog(isOpen, closeDialog);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     mcAudio.playClick();
-    setIsSent(true);
+    setIsDraftPrepared(true);
     const mailto = `mailto:${dev.email}?subject=Message from ${encodeURIComponent(name)}&body=${encodeURIComponent(`From: ${name} (${email})\n\n${message}`)}`;
-    window.open(mailto, '_blank');
-    setTimeout(() => {
-      setIsSent(false);
-      onClose();
-    }, 2000);
+    window.location.href = mailto;
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs select-none animate-fadeIn">
-      <div className="mc-window w-full max-w-md p-6 text-black shadow-2xl relative">
-        <h3 className="text-xl font-bold mb-3 text-center text-black mc-text-shadow-dark">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="contact-title" aria-describedby="contact-description" tabIndex={-1} className="mc-window modal-content w-full max-w-md p-4 sm:p-6 text-black shadow-2xl relative">
+        <h2 id="contact-title" className="text-xl font-bold mb-3 text-center text-black">
           Contact Me
-        </h3>
+        </h2>
 
-        <p className="text-xs text-center text-gray-700 mb-4">
-          Want to collaborate or discuss an opportunity? Leave a message!
+        <p id="contact-description" className="reading-text text-sm text-center text-gray-800 mb-4">
+          Want to collaborate? Compose a message below, then review and send it in your email app.
         </p>
+        <a className="reading-text block text-center text-sm underline mb-4 break-all" href={`mailto:${dev.email}`}>{dev.email}</a>
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div>
-            <label className="block font-bold text-gray-800 mb-1">Name</label>
+            <label htmlFor="contact-name" className="block font-bold text-gray-800 mb-1">Name</label>
             <input
+              id="contact-name"
+              name="name"
+              autoComplete="name"
               type="text"
               required
               value={name}
@@ -53,8 +56,11 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
           </div>
 
           <div>
-            <label className="block font-bold text-gray-800 mb-1">Email</label>
+            <label htmlFor="contact-email" className="block font-bold text-gray-800 mb-1">Email</label>
             <input
+              id="contact-email"
+              name="email"
+              autoComplete="email"
               type="email"
               required
               value={email}
@@ -65,8 +71,10 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
           </div>
 
           <div>
-            <label className="block font-bold text-gray-800 mb-1">Message</label>
+            <label htmlFor="contact-message" className="block font-bold text-gray-800 mb-1">Message</label>
             <textarea
+              id="contact-message"
+              name="message"
               required
               rows={3}
               value={message}
@@ -76,25 +84,25 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
             />
           </div>
 
-          {isSent ? (
-            <div className="p-2 bg-green-200 border border-green-700 text-green-900 font-bold text-center">
-              Message dispatched! Opening mail client...
+          {isDraftPrepared && (
+            <div role="status" className="reading-text p-2 bg-green-200 border border-green-700 text-green-900 text-center">
+              Your email app should open with a draft. Review and send it there. If nothing opens, use the email link above.
             </div>
-          ) : (
-            <div className="flex justify-center gap-3 pt-3">
+          )}
+            <div className="flex flex-wrap justify-center gap-3 pt-3">
               <button
                 type="submit"
                 className="minecraft-button"
-                style={{ width: '150px', height: '40px', fontSize: '13px' }}
+                style={{ minWidth: '150px', height: '44px', fontSize: '12px', paddingInline: '12px' }}
               >
-                Send Message
+                Open Email App
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   mcAudio.playClick();
-                  onClose();
+                  closeDialog();
                 }}
                 className="minecraft-button"
                 style={{ width: '120px', height: '40px', fontSize: '13px' }}
@@ -102,7 +110,6 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                 Cancel
               </button>
             </div>
-          )}
         </form>
       </div>
     </div>

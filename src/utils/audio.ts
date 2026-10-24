@@ -13,7 +13,7 @@ class MCAudioEngine {
         this.bgMusic = new Audio('/audio/Minecraft.mp3');
         this.bgMusic.loop = true;
         this.bgMusic.volume = 0.35;
-        this.bgMusic.preload = 'auto';
+        this.bgMusic.preload = 'none';
       } catch (err) {
         console.warn('Audio initialization warning:', err);
       }
