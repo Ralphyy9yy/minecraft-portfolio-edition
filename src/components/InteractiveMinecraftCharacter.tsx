@@ -4,6 +4,7 @@ import { mcAudio } from '../utils/audio';
 
 interface InteractiveMinecraftCharacterProps {
   className?: string;
+  fill?: boolean;
 }
 
 // Helper to create 16x16 pixel-art CanvasTexture with NearestFilter
@@ -20,7 +21,8 @@ function createSteveTexture(drawFn: (ctx: CanvasRenderingContext2D) => void): TH
 }
 
 export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharacterProps> = ({
-  className = ''
+  className = '',
+  fill = false,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const isClickJumping = useRef(0);
@@ -43,6 +45,15 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     mount.appendChild(renderer.domElement);
+
+    const resizeObserver = new ResizeObserver(() => {
+      const nextWidth = mount.clientWidth || width;
+      const nextHeight = mount.clientHeight || height;
+      camera.aspect = nextWidth / nextHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nextWidth, nextHeight);
+    });
+    resizeObserver.observe(mount);
 
     // 2. Lighting (Warm Minecraft Sunlight + Ambient)
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
@@ -506,6 +517,7 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     // Cleanup
     return () => {
       cancelAnimationFrame(animId);
+      resizeObserver.disconnect();
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchstart', onTouchMove);
@@ -524,12 +536,21 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
   return (
     <div
       ref={mountRef}
+      role="button"
+      tabIndex={0}
+      aria-label="Make the Minecraft character jump"
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       title="Minecraft Steve — Move your mouse to look around! (Click to jump)"
       className={`relative cursor-pointer select-none overflow-hidden ${className}`}
       style={{
-        width: '155px',
-        height: '225px',
+        width: fill ? '100%' : '155px',
+        height: fill ? '100%' : '225px',
         borderRadius: '6px',
         imageRendering: 'pixelated',
       }}

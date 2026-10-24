@@ -3,6 +3,7 @@ import React from 'react';
 interface Props {
   children: React.ReactNode;
   onBack: () => void;
+  fallback?: React.ReactNode;
 }
 
 export class ScreenErrorBoundary extends React.Component<Props, { hasError: boolean }> {
@@ -14,6 +15,7 @@ export class ScreenErrorBoundary extends React.Component<Props, { hasError: bool
 
   render() {
     if (!this.state.hasError) return this.props.children;
+    if (this.props.fallback !== undefined) return this.props.fallback;
     return (
       <div role="alert" className="screen-fallback">
         <h1 tabIndex={-1}>This screen could not load.</h1>

@@ -1,18 +1,23 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { MCButton } from './MCButton';
 import { mcAudio } from '../utils/audio';
 import { PORTFOLIO_DATA } from '../data/portfolioData';
+import { ScreenErrorBoundary } from './ScreenErrorBoundary';
+
+const InteractiveMinecraftCharacter = lazy(() => import('./InteractiveMinecraftCharacter').then((module) => ({ default: module.InteractiveMinecraftCharacter })));
 
 interface MainMenuProps {
   onNavigate: (screen: 'play' | 'about' | 'projects') => void;
   onOpenResume: () => void;
   onOpenContact: () => void;
+  showCharacter?: boolean;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
   onNavigate,
   onOpenResume,
-  onOpenContact
+  onOpenContact,
+  showCharacter = false,
 }) => {
   const splashes = [
     "Ralph Craft Edition!",
@@ -72,6 +77,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         </div>
 
         {/* Buttons List Container */}
+        <div className="main-menu-layout">
         <div className="menu-buttons-container w-full max-w-[340px] sm:max-w-[400px] px-2 sm:px-3">
           {/* Lead with professional work; the game remains an optional demo. */}
           <MCButton
@@ -125,6 +131,18 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               <img src="/images/lang.png" alt="" className="w-5 h-5 sm:w-6 sm:h-6 object-contain" />
             </button>
           </div>
+        </div>
+
+        {showCharacter && (
+          <div className="main-menu-character">
+            <ScreenErrorBoundary onBack={() => onNavigate('about')} fallback={<p className="reading-text text-sm text-white text-center">Character preview unavailable.</p>}>
+              <Suspense fallback={<p role="status" className="reading-text text-xs text-white text-center">Loading character…</p>}>
+                <InteractiveMinecraftCharacter fill />
+              </Suspense>
+            </ScreenErrorBoundary>
+            <p className="reading-text text-xs text-white text-center mc-text-shadow mt-2">Click or tap to jump!</p>
+          </div>
+        )}
         </div>
       </div>
 

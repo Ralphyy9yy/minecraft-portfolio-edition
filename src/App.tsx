@@ -81,6 +81,7 @@ export const App: React.FC = () => {
           }>
             {currentScreen === 'main' && (
               <MainMenu
+                showCharacter={hasStarted}
                 onNavigate={handleNavigate}
                 onOpenResume={() => setIsResumeOpen(true)}
                 onOpenContact={() => setIsContactOpen(true)}
