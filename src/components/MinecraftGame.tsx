@@ -1,23 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { mcAudio } from '../utils/audio';
+import { useDialog } from '../hooks/useDialog';
+import { BlockType, BUILD_HEIGHT, MAX_BLOCKS, SHELTER_PLAN, SavedBlock, WorldLoad, cycleSlot, inBuildBounds, loadWorld, saveWorld, shelterProgress, simulationStep } from '../game/sandbox';
+export { BlockType } from '../game/sandbox';
 
 interface MinecraftGameProps {
   onQuit: () => void;
-}
-
-// Block Types
-export enum BlockType {
-  AIR = 0,
-  GRASS = 1,
-  DIRT = 2,
-  STONE = 3,
-  WOOD = 4,
-  LEAVES = 5,
-  COBBLESTONE = 6,
-  BRICK = 7,
-  DIAMOND_ORE = 8,
-  GLASS = 9,
 }
 
 interface BlockDef {
@@ -47,6 +36,7 @@ function createVoxelTexture(drawFn: (ctx: CanvasRenderingContext2D) => void): TH
   const ctx = canvas.getContext('2d')!;
   drawFn(ctx);
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
   return texture;
@@ -171,6 +161,25 @@ class MCSoundEffects {
 
 const sfxEngine = new MCSoundEffects();
 
+function blockIcon(top: CanvasImageSource, side: CanvasImageSource) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 48;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  const face = (texture: CanvasImageSource, transform: [number, number, number, number, number, number], shade = 0) => {
+    ctx.save();
+    ctx.setTransform(...transform);
+    ctx.drawImage(texture, 0, 0, 16, 16);
+    ctx.fillStyle = `rgba(0,0,0,${shade})`;
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.restore();
+  };
+  face(side, [1.25, 0.625, 0, 1.25, 4, 15], 0.15);
+  face(side, [1.25, -0.625, 0, 1.25, 24, 25], 0.3);
+  face(top, [1.25, 0.625, -1.25, 0.625, 24, 5]);
+  return canvas.toDataURL();
+}
+
 export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedSlot, setSelectedSlot] = useState(0);
@@ -190,6 +199,33 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     jump: false,
   });
   const [isSprinting, setIsSprinting] = useState(false);
+  const [blockIcons, setBlockIcons] = useState<Record<number, string>>({});
+  const [saveMessage, setSaveMessage] = useState('Loading world…');
+  const [controlMessage, setControlMessage] = useState('');
+  const [challenge, setChallenge] = useState(() => shelterProgress(() => undefined));
+  const [showGuides, setShowGuides] = useState(true);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [worldRevision, setWorldRevision] = useState(0);
+  const activeRef = useRef(false);
+  const pausedRef = useRef(false);
+  const touchModeRef = useRef(isTouchDevice);
+  touchModeRef.current = isTouchDevice;
+  const resetRequestedRef = useRef(false);
+  const clearInputsRef = useRef(() => {});
+  const flushSaveRef = useRef(() => {});
+  const selectSlotRef = useRef<(slot: number) => void>(() => {});
+  const guidesRef = useRef(showGuides);
+  guidesRef.current = showGuides;
+
+  const pauseGame = () => {
+    activeRef.current = false;
+    pausedRef.current = true;
+    clearInputsRef.current();
+    flushSaveRef.current();
+    setIsPaused(true);
+    if (document.pointerLockElement === containerRef.current?.querySelector('canvas')) document.exitPointerLock();
+  };
+  const pauseDialogRef = useDialog(isPaused, () => { if (confirmReset) setConfirmReset(false); else resumeGame(); });
 
   const performMineRef = useRef<() => void>(() => {});
   const performPlaceRef = useRef<() => void>(() => {});
@@ -222,6 +258,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
+    activeRef.current = touchModeRef.current && !pausedRef.current;
+    let disposed = false;
 
     // 2. Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
@@ -404,6 +442,14 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
 
     const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const icons: Record<number, string> = {};
+    for (const block of HOTBAR_BLOCKS) {
+      const material = blockMaterials[block.type];
+      const top = (Array.isArray(material) ? material[2] : material) as THREE.MeshLambertMaterial;
+      const side = (Array.isArray(material) ? material[0] : material) as THREE.MeshLambertMaterial;
+      icons[block.type] = blockIcon(top.map!.image as CanvasImageSource, side.map!.image as CanvasImageSource);
+    }
+    setBlockIcons(icons);
 
     // 4. Procedural Voxel World
     const WORLD_SIZE = 28;
@@ -462,6 +508,44 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       }
     });
 
+    const resetting = resetRequestedRef.current;
+    resetRequestedRef.current = false;
+    let storedWorld: WorldLoad;
+    try { storedWorld = resetting ? { status: 'new' } : loadWorld(window.localStorage); }
+    catch { storedWorld = { status: 'unavailable' }; }
+    if (storedWorld.status === 'restored') {
+      worldMap.clear();
+      for (const [x, y, z, type] of storedWorld.snapshot.blocks) worldMap.set(getCoordKey(x, y, z), { type });
+    }
+    const canSave = storedWorld.status !== 'invalid';
+    let dirty = storedWorld.status === 'new';
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    setSaveMessage(storedWorld.status === 'invalid' ? 'Saved world is unreadable. Reset World to start fresh.' : storedWorld.status === 'unavailable' ? 'Storage unavailable. Changes may not be saved.' : storedWorld.status === 'restored' ? 'Saved world restored on this device' : 'New world — saves on this device');
+
+    const flushSave = (updateUI = true) => {
+      clearTimeout(saveTimer);
+      if (!dirty || !canSave || resetRequestedRef.current) return;
+      let saved = false;
+      try {
+        const blocks: SavedBlock[] = Array.from(worldMap, ([key, block]) => {
+          const [x, y, z] = key.split(',').map(Number);
+          return [x, y, z, block.type];
+        });
+        saved = saveWorld(window.localStorage, blocks);
+      } catch { /* Storage can be blocked by the browser. Keep this session playable. */ }
+      if (saved) dirty = false;
+      if (updateUI && !disposed) setSaveMessage(saved ? 'World saved on this device' : 'Could not save. This session is still playable.');
+    };
+    flushSaveRef.current = () => flushSave();
+    const queueSave = () => {
+      dirty = true;
+      if (!canSave) return;
+      setSaveMessage('Saving…');
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(flushSave, 400);
+    };
+    if (dirty) queueSave();
+
     // Mesh Group
     const blockGroup = new THREE.Group();
     scene.add(blockGroup);
@@ -498,6 +582,25 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         val.mesh = spawnMeshForVoxel(x, y, z, val.type);
       }
     });
+
+    const guideMaterial = new THREE.LineBasicMaterial({ color: 0x83ffe0, transparent: true, opacity: 0.32, depthWrite: false });
+    const guideGeometry = new THREE.EdgesGeometry(boxGeometry);
+    const guideGroup = new THREE.Group();
+    const guideCells = SHELTER_PLAN.map((cell) => {
+      const outline = new THREE.LineSegments(guideGeometry, guideMaterial);
+      outline.position.set(cell.x, cell.y, cell.z);
+      guideGroup.add(outline);
+      return { cell, outline };
+    });
+    scene.add(guideGroup);
+    const updateChallenge = () => {
+      const getBlock = (x: number, y: number, z: number) => worldMap.get(getCoordKey(x, y, z))?.type;
+      const progress = shelterProgress(getBlock);
+      setChallenge(progress);
+      const nextPart = progress.floor < 25 ? 'floor' : progress.walls < 30 ? 'walls' : 'roof';
+      for (const { cell, outline } of guideCells) outline.visible = cell.part === nextPart && !getBlock(cell.x, cell.y, cell.z);
+    };
+    updateChallenge();
 
     // 5. Authentic Minecraft Voxel Clouds
     const cloudGroup = new THREE.Group();
@@ -546,7 +649,17 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     scene.add(camera);
 
     // Steve Arm Mesh (attached to bottom right of screen)
-    const armMat = new THREE.MeshLambertMaterial({ color: 0x00a8a8 }); // Cyan Steve Sleeve
+    const sleeveTexture = createVoxelTexture((ctx) => {
+      ctx.fillStyle = '#202629';
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = '#343e43';
+      ctx.fillRect(2, 1, 3, 12);
+      ctx.fillStyle = '#141a1d';
+      ctx.fillRect(12, 0, 4, 16);
+      ctx.fillStyle = '#23d48d';
+      ctx.fillRect(0, 14, 16, 1);
+    });
+    const armMat = new THREE.MeshLambertMaterial({ map: sleeveTexture });
     const handMat = new THREE.MeshLambertMaterial({ color: 0xb87b54 }); // Skin tone hand
     const armGeo = new THREE.BoxGeometry(0.24, 0.6, 0.24);
     const handGeo = new THREE.BoxGeometry(0.24, 0.28, 0.24);
@@ -566,7 +679,9 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     heldItemMesh.rotation.set(0.3, 0.6, 0);
     fullArm.add(heldItemMesh);
 
-    fullArm.position.set(0.38, -0.32, -0.6);
+    const armBaseX = () => Math.min(camera.aspect, 1.4) * 0.34;
+    fullArm.scale.setScalar(0.6);
+    fullArm.position.set(armBaseX(), -0.16, -0.9);
     fullArm.rotation.set(0.2, -0.2, 0.1);
     armGroup.add(fullArm);
 
@@ -577,9 +692,18 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
 
     // 8. Player Controls & AABB Collision Physics
-    camera.position.set(0, 10, 0);
+    const respawn = () => {
+      let ground = -1;
+      for (let y = BUILD_HEIGHT; y >= 0; y--) {
+        if (worldMap.has(getCoordKey(0, y, 0))) { ground = y; break; }
+      }
+      camera.position.set(0, Math.max(ground + 0.5 + 1.62 + 0.01, 5), 0);
+    };
+    respawn();
     let playerYaw = 0;
-    let playerPitch = 0;
+    let playerPitch = -0.22;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.x = playerPitch;
     const playerPos = camera.position;
     const playerVelocity = new THREE.Vector3(0, 0, 0);
     let isOnGround = false;
@@ -587,22 +711,24 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     let stepTimer = 0;
 
     const keys: Record<string, boolean> = {};
+    const selectSlot = (slot: number) => {
+      const next = Math.max(0, Math.min(HOTBAR_BLOCKS.length - 1, slot));
+      selectedSlotRef.current = next;
+      setSelectedSlot(next);
+      heldItemMesh.material = blockMaterials[HOTBAR_BLOCKS[next].type];
+      mcAudio.playClick();
+    };
+    selectSlotRef.current = selectSlot;
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') { if (activeRef.current) pauseGame(); return; }
+      if (!activeRef.current || pausedRef.current) return;
+      if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ControlLeft', 'ControlRight'].includes(e.code)) e.preventDefault();
       keys[e.code] = true;
       if (e.key >= '1' && e.key <= '9') {
         const slot = parseInt(e.key) - 1;
         if (slot < HOTBAR_BLOCKS.length) {
-          setSelectedSlot(slot);
-          mcAudio.playClick();
-          // Update held block texture
-          const def = HOTBAR_BLOCKS[slot];
-          heldItemMesh.material = blockMaterials[def.type];
-        }
-      }
-      if (e.code === 'Escape') {
-        if (document.pointerLockElement === renderer.domElement) {
-          document.exitPointerLock();
+          selectSlot(slot);
         }
       }
     };
@@ -616,7 +742,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
     // Mouse Look (PointerLock)
     const onMouseMove = (e: MouseEvent) => {
-      if (document.pointerLockElement !== renderer.domElement) return;
+      if (!activeRef.current || pausedRef.current || document.pointerLockElement !== renderer.domElement) return;
       const sensitivity = 0.0022;
       playerYaw -= e.movementX * sensitivity;
       playerPitch -= e.movementY * sensitivity;
@@ -635,6 +761,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     let lastLookY = 0;
 
     const onTouchStart = (e: TouchEvent) => {
+      if (!activeRef.current || pausedRef.current || !touchModeRef.current || e.target !== renderer.domElement) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         // Only bind look drag if touch is NOT on D-pad area (bottom-left)
@@ -648,6 +775,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (!activeRef.current || pausedRef.current || !touchModeRef.current) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === lookTouchId) {
@@ -686,9 +814,37 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     const onPointerLockChange = () => {
       const locked = document.pointerLockElement === renderer.domElement;
       setIsLocked(locked);
-      setIsPaused(!locked);
+      if (locked) {
+        activeRef.current = true;
+        pausedRef.current = false;
+        setControlMessage('');
+        setIsPaused(false);
+      } else if (!touchModeRef.current) {
+        pauseGame();
+      }
     };
     document.addEventListener('pointerlockchange', onPointerLockChange);
+    const onPointerLockError = () => {
+      pauseGame();
+      setControlMessage('Mouse capture was blocked. Try Back to Game, or switch to touch controls.');
+    };
+    document.addEventListener('pointerlockerror', onPointerLockError);
+
+    clearInputsRef.current = () => {
+      for (const key of Object.keys(keys)) delete keys[key];
+      mobileMoveRef.current = { forward: false, backward: false, left: false, right: false, jump: false, sprint: false };
+      setDpadActive({ forward: false, backward: false, left: false, right: false, jump: false });
+      setIsSprinting(false);
+      lookTouchId = null;
+      playerVelocity.x = playerVelocity.z = 0;
+      stepTimer = 0;
+    };
+    const onBlur = () => { if (activeRef.current) pauseGame(); };
+    const onVisibilityChange = () => { if (document.hidden) { pauseGame(); flushSave(); } };
+    const onPageHide = () => flushSave(false);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     // Targeting raycaster
     const raycaster = new THREE.Raycaster();
@@ -704,6 +860,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
     // Actions: Mine Block & Place Block (supports desktop click & mobile PE buttons)
     const performMine = () => {
+      if (!activeRef.current || pausedRef.current) return;
       triggerPunch();
       raycaster.setFromCamera(screenCenter, camera);
       const intersects = raycaster.intersectObjects(blockGroup.children);
@@ -718,6 +875,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
         worldMap.delete(getCoordKey(voxelCoord.x, voxelCoord.y, voxelCoord.z));
         blockGroup.remove(hit.object);
+        updateChallenge();
+        queueSave();
 
         // Reveal adjacent blocks
         const neighbors = [
@@ -739,6 +898,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
 
     const performPlace = () => {
+      if (!activeRef.current || pausedRef.current) return;
       triggerPunch();
       raycaster.setFromCamera(screenCenter, camera);
       const intersects = raycaster.intersectObjects(blockGroup.children);
@@ -750,12 +910,13 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         const placeX = voxelCoord.x + Math.round(hit.face.normal.x);
         const placeY = voxelCoord.y + Math.round(hit.face.normal.y);
         const placeZ = voxelCoord.z + Math.round(hit.face.normal.z);
+        if (!inBuildBounds(placeX, placeY, placeZ) || worldMap.size >= MAX_BLOCKS) return;
 
         // Player collision test (prevent placing inside player)
         const pMinX = playerPos.x - 0.35;
         const pMaxX = playerPos.x + 0.35;
-        const pMinY = playerPos.y - 1.5;
-        const pMaxY = playerPos.y + 0.3;
+        const pMinY = playerPos.y - 1.62;
+        const pMaxY = playerPos.y + 0.18;
         const pMinZ = playerPos.z - 0.35;
         const pMaxZ = playerPos.z + 0.35;
 
@@ -779,6 +940,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
           sfxEngine.playPlace();
           const newMesh = spawnMeshForVoxel(placeX, placeY, placeZ, selectedDef.type);
           worldMap.set(placeKey, { type: selectedDef.type, mesh: newMesh });
+          updateChallenge();
+          queueSave();
         }
       }
     };
@@ -788,10 +951,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
     // Mouse Actions (Mining & Placing)
     const onMouseDown = (e: MouseEvent) => {
-      if (!isTouchDevice && document.pointerLockElement !== renderer.domElement) {
-        renderer.domElement.requestPointerLock();
-        return;
-      }
+      if (pausedRef.current || touchModeRef.current || !activeRef.current) return;
       if (e.button === 0) {
         performMine();
       } else if (e.button === 2) {
@@ -803,7 +963,12 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     canvasDom.addEventListener('mousedown', onMouseDown);
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
     canvasDom.addEventListener('contextmenu', onContextMenu);
-    canvasDom.requestPointerLock();
+    const onWheel = (event: WheelEvent) => {
+      if (!activeRef.current || pausedRef.current || !event.deltaY) return;
+      event.preventDefault();
+      selectSlot(cycleSlot(selectedSlotRef.current, event.deltaY, HOTBAR_BLOCKS.length));
+    };
+    canvasDom.addEventListener('wheel', onWheel, { passive: false });
 
     // 9. True AABB Voxel Wall Collision Test
     const isSolidBlockAt = (x: number, y: number, z: number) => {
@@ -817,14 +982,14 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       const height = 1.7;
       const minX = px - radius;
       const maxX = px + radius;
-      const minY = py - 1.5;
-      const maxY = py - 1.5 + height;
+      const minY = py - 1.62;
+      const maxY = minY + height + 0.1;
       const minZ = pz - radius;
       const maxZ = pz + radius;
 
-      for (let x = Math.floor(minX); x <= Math.floor(maxX); x++) {
-        for (let y = Math.floor(minY); y <= Math.floor(maxY); y++) {
-          for (let z = Math.floor(minZ); z <= Math.floor(maxZ); z++) {
+      for (let x = Math.floor(minX + 0.500001); x <= Math.floor(maxX + 0.499999); x++) {
+        for (let y = Math.floor(minY + 0.500001); y <= Math.floor(maxY + 0.499999); y++) {
+          for (let z = Math.floor(minZ + 0.500001); z <= Math.floor(maxZ + 0.499999); z++) {
             if (isSolidBlockAt(x, y, z)) {
               return true;
             }
@@ -836,14 +1001,24 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
     // 10. Main Game Loop
     let lastTime = performance.now();
+    let simulationTime = 0;
+    let animationFrame = 0;
 
     const animate = () => {
       const now = performance.now();
-      const delta = Math.min((now - lastTime) / 1000, 0.08);
-      lastTime = now;
+      const frame = simulationStep(lastTime, now, activeRef.current, pausedRef.current);
+      const delta = frame.delta;
+      lastTime = frame.time;
+      guideGroup.visible = guidesRef.current;
+      if (!delta) {
+        renderer.render(scene, camera);
+        animationFrame = requestAnimationFrame(animate);
+        return;
+      }
+      simulationTime += delta;
 
       // Slowly drift clouds
-      cloudGroup.position.x = (now * 0.001) % 44;
+      cloudGroup.position.x = simulationTime % 44;
 
       // Update targeting wireframe
       raycaster.setFromCamera(screenCenter, camera);
@@ -876,7 +1051,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       const isLeft = keys['KeyA'] || mobileMoveRef.current.left;
       const isRight = keys['KeyD'] || mobileMoveRef.current.right;
       const isJumping = keys['Space'] || mobileMoveRef.current.jump;
-      const isSprinting = keys['ControlLeft'] || keys['KeyR'] || mobileMoveRef.current.sprint;
+      const isSprinting = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyR'] || mobileMoveRef.current.sprint;
 
       const speed = isSprinting ? 8.5 : 5.8; // Sprint support
       const moveDir = new THREE.Vector3();
@@ -922,31 +1097,30 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       }
 
       // Y Movement (Vertical ground collision)
-      const newY = playerPos.y + playerVelocity.y * delta;
-      if (playerVelocity.y < 0) {
-        // Falling down
-        if (collidesWithWorld(playerPos.x, newY, playerPos.z)) {
-          // Snap onto ground
-          playerPos.y = Math.floor(playerPos.y - 1.5) + 1.5001;
+      const verticalMove = playerVelocity.y * delta;
+      const steps = Math.max(1, Math.ceil(Math.abs(verticalMove) / 0.2));
+      isOnGround = false;
+      for (let step = 0; step < steps; step++) {
+        const increment = verticalMove / steps;
+        if (collidesWithWorld(playerPos.x, playerPos.y + increment, playerPos.z)) {
+          let safe = 0;
+          let blocked = 1;
+          for (let attempt = 0; attempt < 12; attempt++) {
+            const fraction = (safe + blocked) / 2;
+            if (collidesWithWorld(playerPos.x, playerPos.y + increment * fraction, playerPos.z)) blocked = fraction;
+            else safe = fraction;
+          }
+          playerPos.y += increment * safe;
+          isOnGround = playerVelocity.y < 0;
           playerVelocity.y = 0;
-          isOnGround = true;
-        } else {
-          playerPos.y = newY;
-          isOnGround = false;
+          break;
         }
-      } else if (playerVelocity.y > 0) {
-        // Jumping up (hit ceiling)
-        if (collidesWithWorld(playerPos.x, newY, playerPos.z)) {
-          playerVelocity.y = 0;
-        } else {
-          playerPos.y = newY;
-        }
-        isOnGround = false;
+        playerPos.y += increment;
       }
 
       // Fall off safety
       if (playerPos.y < -15) {
-        playerPos.set(0, 14, 0);
+        respawn();
         playerVelocity.set(0, 0, 0);
       }
 
@@ -971,33 +1145,40 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         punchTime = Math.max(0, punchTime - delta * 5.0);
         const swing = Math.sin(punchTime * Math.PI);
         fullArm.rotation.x = 0.2 - swing * 0.8;
-        fullArm.position.z = -0.6 + swing * 0.15;
+        fullArm.position.z = -0.9 + swing * 0.12;
       } else {
         // Arm walk bobbing
         const armBob = Math.sin(walkCycle) * 0.03;
-        fullArm.position.y = -0.32 + armBob + headBobY * 0.5;
-        fullArm.position.x = 0.38 + headBobX * 0.5;
+        fullArm.position.y = -0.16 + armBob + headBobY * 0.5;
+        fullArm.position.x = armBaseX() + headBobX * 0.5;
+        fullArm.position.z = -0.9;
         fullArm.rotation.x = 0.2 + armBob * 1.5;
       }
 
       renderer.render(scene, camera);
-      requestAnimationFrame(animate);
+      animationFrame = requestAnimationFrame(animate);
     };
 
-    const reqId = requestAnimationFrame(animate);
+    animationFrame = requestAnimationFrame(animate);
 
     const onResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      setIsTouchDevice(
-        'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth <= 820
-      );
     };
     window.addEventListener('resize', onResize);
 
     return () => {
-      cancelAnimationFrame(reqId);
+      disposed = true;
+      activeRef.current = false;
+      flushSave(false);
+      clearTimeout(saveTimer);
+      cancelAnimationFrame(animationFrame);
+      performMineRef.current = () => {};
+      performPlaceRef.current = () => {};
+      clearInputsRef.current = () => {};
+      flushSaveRef.current = () => {};
+      selectSlotRef.current = () => {};
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('mousemove', onMouseMove);
@@ -1006,38 +1187,95 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchEnd);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
+      document.removeEventListener('pointerlockerror', onPointerLockError);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('resize', onResize);
       canvasDom.removeEventListener('mousedown', onMouseDown);
       canvasDom.removeEventListener('contextmenu', onContextMenu);
+      canvasDom.removeEventListener('wheel', onWheel);
       if (document.pointerLockElement === canvasDom) {
         document.exitPointerLock();
       }
+      const geometries = new Set<THREE.BufferGeometry>([boxGeometry, particleGeo, guideGeometry]);
+      const materials = new Set<THREE.Material>(Object.values(blockMaterials).flat());
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+          geometries.add(object.geometry);
+          for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material);
+        }
+      });
+      const textures = new Set<THREE.Texture>();
+      for (const material of materials) {
+        if ('map' in material && material.map instanceof THREE.Texture) textures.add(material.map);
+        material.dispose();
+      }
+      geometries.forEach((geometry) => geometry.dispose());
+      textures.forEach((texture) => texture.dispose());
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [worldRevision]);
 
   const resumeGame = () => {
     mcAudio.playClick();
+    setConfirmReset(false);
+    setControlMessage('');
+    if (touchModeRef.current) {
+      pausedRef.current = false;
+      activeRef.current = true;
+      setIsPaused(false);
+      return;
+    }
     const canvas = containerRef.current?.querySelector('canvas');
     if (canvas) {
-      canvas.requestPointerLock();
+      try {
+        const request = canvas.requestPointerLock();
+        request?.catch(() => {
+          pauseGame();
+          setControlMessage('Mouse capture was blocked. Try again or use touch controls.');
+        });
+      } catch {
+        pauseGame();
+        setControlMessage('Mouse capture is unavailable. Use touch controls to play.');
+      }
     }
-    setIsPaused(false);
   };
 
   const handleQuitGame = () => {
     mcAudio.playClick();
+    activeRef.current = false;
+    flushSaveRef.current();
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
     onQuit();
   };
 
+  const toggleControls = () => {
+    pauseGame();
+    const next = !touchModeRef.current;
+    touchModeRef.current = next;
+    setIsTouchDevice(next);
+    setControlMessage('');
+  };
+
+  const resetWorld = () => {
+    resetRequestedRef.current = true;
+    activeRef.current = false;
+    pausedRef.current = true;
+    setConfirmReset(false);
+    setShowGuides(true);
+    setSelectedSlot(0);
+    selectedSlotRef.current = 0;
+    setWorldRevision((revision) => revision + 1);
+  };
+
   return (
-    <div className="relative w-screen h-screen overflow-hidden select-none font-minecraft">
+    <div className="relative w-screen h-full overflow-hidden select-none font-minecraft">
       {/* 3D Canvas */}
       <div ref={containerRef} className="w-full h-full cursor-none" />
 
@@ -1073,14 +1311,14 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
       {/* Top Bar: Pause Button & Mode Switch */}
       {!isPaused && (
-        <>
+        <div className="sandbox-topbar">
           {/* Minecraft PE Center Top Pause Button */}
           <button
             onClick={() => {
               mcAudio.playClick();
-              setIsPaused(true);
+              pauseGame();
             }}
-            className="fixed top-3 left-1/2 -translate-x-1/2 z-30 pe-button px-3 py-1.5 rounded text-xs font-bold pointer-events-auto"
+            className="pe-button px-3 py-1.5 rounded font-bold"
             title="Pause Game"
           >
             ❚❚ PAUSE
@@ -1090,14 +1328,31 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
           <button
             onClick={() => {
               mcAudio.playClick();
-              setIsTouchDevice((v) => !v);
+              toggleControls();
             }}
-            className="fixed top-3 right-3 z-30 pe-button px-2.5 py-1 text-[10px] rounded pointer-events-auto"
+            className="pe-button px-2.5 py-1 rounded"
             title="Toggle between Mobile Pocket Edition and Desktop PC controls"
           >
             {isTouchDevice ? '📱 Mobile PE' : '💻 PC Controls'}
           </button>
-        </>
+        </div>
+      )}
+
+      {!isPaused && (
+        <aside className="sandbox-status" aria-label="Creative sandbox status">
+          <p className="text-green-200 text-[10px]">Creative Sandbox</p>
+          <p className="reading-text text-xs text-gray-100" role="status">{saveMessage}</p>
+          <details className="mt-2">
+            <summary className="text-[10px] cursor-pointer py-2">{challenge.complete ? 'Shelter built!' : `Shelter challenge: ${challenge.total}/${SHELTER_PLAN.length}`}</summary>
+            <div className="reading-text text-xs space-y-2 mt-2">
+              <p>Follow the glowing outline ahead of spawn. Use any blocks, and leave the front doorway open.</p>
+              <p>Floor: {challenge.floor}/25 · Walls: {challenge.walls}/30 · Roof: {challenge.roof}/25</p>
+              <label className="flex items-center gap-2 py-2">
+                <input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> Show building guide
+              </label>
+            </div>
+          </details>
+        </aside>
       )}
 
       {/* Minecraft Pocket Edition (PE) On-Screen Touch Controls */}
@@ -1295,20 +1550,10 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       )}
 
       {/* Authentic Minecraft In-Game HUD */}
-      <div className="absolute bottom-2 sm:bottom-3 inset-x-0 flex flex-col items-center pointer-events-none z-20 px-2">
+      <div className={`sandbox-hud ${isTouchDevice ? 'sandbox-hud--touch' : ''} absolute bottom-2 sm:bottom-3 inset-x-0 flex flex-col items-center pointer-events-none z-20 px-2`}>
         {/* Selected block label */}
         <div className="text-white text-xs mc-text-shadow font-bold mb-1.5">
           {HOTBAR_BLOCKS[selectedSlot]?.name}
-        </div>
-
-        {/* Health & Hunger Bars */}
-        <div className="w-[340px] max-w-[90vw] flex justify-between px-1 mb-1 text-xs sm:text-sm select-none">
-          <div className="flex gap-0.5" title="10/10 Hearts">
-            {'❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️'}
-          </div>
-          <div className="flex gap-0.5" title="10/10 Food">
-            {'🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗'}
-          </div>
         </div>
 
         {/* 9-Slot Hotbar */}
@@ -1316,13 +1561,14 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
           {HOTBAR_BLOCKS.map((block, idx) => {
             const isSelected = idx === selectedSlot;
             return (
-              <div
+              <button
+                type="button"
                 key={block.type}
-                onClick={() => {
-                  setSelectedSlot(idx);
-                  mcAudio.playClick();
-                }}
-                className={`w-7 h-7 sm:w-10 sm:h-10 border-2 flex items-center justify-center relative cursor-pointer pointer-events-auto transition-transform ${
+                disabled={isPaused}
+                aria-label={`Select ${block.name}, slot ${idx + 1}`}
+                aria-pressed={isSelected}
+                onClick={() => selectSlotRef.current(idx)}
+                className={`w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 border-2 flex items-center justify-center relative cursor-pointer pointer-events-auto transition-transform ${
                   isSelected
                     ? 'border-white bg-white/30 scale-105 sm:scale-110 shadow-lg z-10'
                     : 'border-[#373737] bg-[#8b8b8b]'
@@ -1334,14 +1580,14 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
                 }}
                 title={`Slot ${idx + 1}: ${block.name}`}
               >
-                <div
+                {blockIcons[block.type] ? <img src={blockIcons[block.type]} alt="" className="w-6 h-6 sm:w-8 sm:h-8" draggable={false} /> : <div
                   className="w-4 h-4 sm:w-6 sm:h-6 border border-black/40 shadow-sm"
                   style={{ backgroundColor: block.iconColor }}
-                />
+                />}
                 <span className="absolute bottom-0.5 right-0.5 sm:right-1 text-[8px] sm:text-[9px] text-white font-mono drop-shadow-[1px_1px_0px_#000]">
                   {idx + 1}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -1350,17 +1596,29 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         <div className="text-[9px] sm:text-[10px] text-gray-300 mc-text-shadow mt-1 text-center">
           {isTouchDevice
             ? 'D-Pad: Move • Swipe right side: Look • ⛏️ Mine • 🧱 Place • ▲ Jump'
-            : 'WASD: Move • Space: Jump • Left Click: Mine • Right Click: Place • 1-9: Hotbar • ESC: Pause'}
+            : 'WASD: Move • Ctrl: Sprint • Space: Jump • Left: Mine • Right: Place • Wheel / 1–9: Hotbar • Esc: Pause'}
         </div>
       </div>
 
       {/* Pause Menu (ESC) */}
       {isPaused && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs select-none">
-          <div className="flex flex-col items-center gap-3 w-full max-w-sm px-4">
-            <h2 className="text-2xl font-bold text-white mc-text-shadow mb-4">
-              Game Paused
+          <div ref={pauseDialogRef} role="dialog" aria-modal="true" aria-labelledby="sandbox-pause-title" tabIndex={-1} className="modal-content flex flex-col items-center gap-3 w-full max-w-sm p-4">
+            <h2 id="sandbox-pause-title" className="text-xl font-bold text-white mc-text-shadow mb-2">
+              {confirmReset ? 'Reset World?' : 'Game Paused'}
             </h2>
+
+            <p className="reading-text text-sm text-gray-100 text-center" role="status">{saveMessage}</p>
+            {controlMessage && <p className="reading-text text-sm text-yellow-200 text-center" role="alert">{controlMessage}</p>}
+
+            {confirmReset ? (
+              <>
+                <p className="reading-text text-sm text-white text-center">This replaces your saved world and shelter progress on this browser with fresh terrain. Your current builds will be lost.</p>
+                <button onClick={resetWorld} className="minecraft-button w-full h-12 text-xs">Reset World</button>
+                <button autoFocus onClick={() => setConfirmReset(false)} className="minecraft-button w-full h-12 text-xs">Keep My World</button>
+              </>
+            ) : (
+              <>
 
             <button
               onClick={resumeGame}
@@ -1369,12 +1627,21 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
               Back to Game
             </button>
 
+            <button onClick={() => flushSaveRef.current()} className="minecraft-button w-full h-11 text-xs">Save World</button>
+            <button onClick={toggleControls} className="minecraft-button w-full h-11 text-xs">{isTouchDevice ? 'Use PC Controls' : 'Use Touch Controls'}</button>
+            <button onClick={() => setConfirmReset(true)} className="minecraft-button w-full h-11 text-xs">Reset World…</button>
+            <label className="reading-text flex items-center gap-2 text-sm text-white py-2">
+              <input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /> Show shelter guide
+            </label>
+
             <button
               onClick={handleQuitGame}
               className="minecraft-button w-full h-11 text-sm"
             >
               Quit to Title Screen
             </button>
+              </>
+            )}
           </div>
         </div>
       )}

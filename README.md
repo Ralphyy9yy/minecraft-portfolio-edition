@@ -95,6 +95,18 @@ Project images in `public/images/projects/` come from the corresponding public p
 
 Static images and audio are located in `public/`. Keep referenced filenames unchanged, or update their paths in the corresponding components and data entries.
 
+## Creative Sandbox
+
+Open **Play Minecraft** for a small voxel building world. On desktop, click **Enter World** to capture the mouse. Use WASD to move, Ctrl to sprint, Space to jump, left click to mine, and right click to place. Select blocks with the mouse wheel or keys 1–9. Touch controls provide movement, camera look, mining, placement, and jumping; the control mode can be changed in the pause menu.
+
+- **Pause:** Escape, the pause button, changing tabs, or losing window focus freezes the simulation and clears movement input.
+- **Local saves:** The complete block layout saves after edits, when pausing, and when leaving the game. Reloading or reopening Play restores it. Saves use `localStorage` under `ralphcraft.sandbox.v1`; they belong to the current browser and site origin, not a cloud account. Browser storage restrictions or quota errors are reported in the HUD. Clearing site data removes the save.
+- **Reset World:** Open the pause menu and confirm **Reset World** to replace the saved terrain and challenge progress. An unreadable or unsupported save is preserved until an explicit reset.
+- **Shelter challenge:** Follow the glowing outline ahead of spawn. The guide reveals the floor, then the walls, then the roof. Build a 5×5 floor, two-block-high perimeter walls with the front doorway left open, and a roof. Progress checks the actual planned block positions (25 floor, 30 wall, and 25 roof blocks). The guide can be hidden; free building remains available.
+- **Build limits:** Blocks can be placed within 32 blocks of spawn on either horizontal axis, from height 0 through 48, up to 40,000 blocks per world.
+
+The sandbox uses a creative HUD with unlimited building blocks rather than decorative health and hunger meters. Run `npm test` to check save validation, save round trips, shelter progress, pause timing, and hotbar wraparound alongside the portfolio checks.
+
 ## Production Build
 
 Create and test a production build before deployment:
