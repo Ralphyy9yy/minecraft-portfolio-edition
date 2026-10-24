@@ -61,7 +61,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           <button
             type="button"
             onClick={cycleSplash}
-            className="absolute bottom-[calc(25%+16px)] right-0 sm:-right-8 border-0 bg-transparent p-0 cursor-pointer select-none z-20"
+            className="absolute bottom-[calc(25%+32px)] right-0 sm:-right-8 border-0 bg-transparent p-0 cursor-pointer select-none z-20"
             title="Click for next quote!"
             aria-label="Show next splash message"
           >

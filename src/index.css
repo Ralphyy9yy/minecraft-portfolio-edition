@@ -493,7 +493,7 @@ textarea,
   font-size: 11px;
   text-shadow: 2px 2px 0px #3f3f00;
   animation: splash 1.5s ease-in-out infinite alternate;
-  transform-origin: bottom right;
+  transform-origin: center;
   display: inline-block;
 }
 @media (min-width: 640px) {

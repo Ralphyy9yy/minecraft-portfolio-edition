@@ -7,6 +7,12 @@ interface InteractiveMinecraftCharacterProps {
   fill?: boolean;
 }
 
+const RESTING_HEIGHT = 0.1;
+const JUMP_HEIGHT = 0.72;
+const JUMP_DURATION = 0.62;
+const LANDING_DURATION = 0.16;
+const FOOT_OFFSET = 1.48;
+
 // Helper to create 16x16 pixel-art CanvasTexture with NearestFilter
 function createSteveTexture(drawFn: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -25,7 +31,7 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
   fill = false,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
-  const isClickJumping = useRef(0);
+  const jumpElapsed = useRef<number | null>(null);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -37,8 +43,8 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     // 1. Scene, Camera, Renderer
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    // Camera framed on full body Steve
-    camera.position.set(0, -0.1, 5.2);
+    // Leave room above the head at the jump apex and below the fixed platform.
+    camera.position.set(0, 0.25, 7.0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(width, height);
@@ -426,12 +432,13 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
       new THREE.MeshLambertMaterial({ map: grassSideTex }), // back
     ];
     const pedestalMesh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.3, 2.2), pedestalMat);
-    pedestalMesh.position.set(0, -1.65, 0);
+    pedestalMesh.position.set(0, -1.65 + RESTING_HEIGHT, 0);
+    pedestalMesh.rotation.y = 0.2;
     pedestalMesh.receiveShadow = true;
-    steveGroup.add(pedestalMesh);
+    scene.add(pedestalMesh);
 
     // Steve initial stance (natural Minecraft angle)
-    steveGroup.position.set(0, 0.1, 0);
+    steveGroup.position.set(0, RESTING_HEIGHT, 0);
     steveGroup.rotation.y = 0.2;
 
     // 5. Cursor Tracking with Neck Safe Clamping
@@ -480,33 +487,50 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     // 6. Animation Loop
     let animId: number;
     const clock = new THREE.Clock();
+    let landingElapsed = LANDING_DURATION;
 
     const animate = () => {
-      const delta = clock.getDelta();
-      const elapsed = clock.getElapsedTime();
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.elapsedTime;
 
       // Smooth interpolation for head and body rotation
       headGroup.rotation.y += (targetHeadYaw - headGroup.rotation.y) * 0.12;
       headGroup.rotation.x += (targetHeadPitch - headGroup.rotation.x) * 0.12;
       steveGroup.rotation.y += (targetSteveYaw - steveGroup.rotation.y) * 0.08;
 
-      // Idle breathing and slight natural sway
+      // Keep the feet grounded while idle; only the arms sway.
       const idle = Math.sin(elapsed * 2.2);
-      steveGroup.position.y = 0.1 + idle * 0.015;
+      let jumpHeight = 0;
 
       // Subtle arm idle motion
       leftArmGroup.rotation.x = idle * 0.04;
       rightArmGroup.rotation.x = -idle * 0.04;
+      leftLegGroup.rotation.x = 0;
+      rightLegGroup.rotation.x = 0;
 
-      // Click Jump Reaction
-      if (isClickJumping.current > 0) {
-        const jumpFactor = Math.sin(isClickJumping.current * Math.PI);
-        steveGroup.position.y = 0.1 + jumpFactor * 0.28;
-        leftArmGroup.rotation.x = -jumpFactor * 0.8;
-        rightArmGroup.rotation.x = jumpFactor * 0.8;
-        headGroup.rotation.x += jumpFactor * -0.15;
-        isClickJumping.current = Math.max(0, isClickJumping.current - delta * 3.5);
+      if (jumpElapsed.current !== null) {
+        jumpElapsed.current = Math.min(JUMP_DURATION, jumpElapsed.current + delta);
+        const progress = jumpElapsed.current / JUMP_DURATION;
+        // A ballistic arc gives upward takeoff, a slow apex, and downward acceleration.
+        jumpHeight = 4 * JUMP_HEIGHT * progress * (1 - progress);
+        const pose = Math.sin(progress * Math.PI);
+        leftArmGroup.rotation.x = -pose * 0.3;
+        rightArmGroup.rotation.x = pose * 0.3;
+        leftLegGroup.rotation.x = pose * 0.15;
+        rightLegGroup.rotation.x = -pose * 0.15;
+        landingElapsed = LANDING_DURATION;
+
+        if (jumpElapsed.current >= JUMP_DURATION) {
+          jumpElapsed.current = null;
+          landingElapsed = 0;
+        }
       }
+
+      // A brief landing compression absorbs the impact without sinking the feet.
+      landingElapsed = Math.min(LANDING_DURATION, landingElapsed + delta);
+      const squash = Math.sin((landingElapsed / LANDING_DURATION) * Math.PI) * 0.045;
+      steveGroup.scale.set(1 + squash * 0.4, 1 - squash, 1 + squash * 0.4);
+      steveGroup.position.y = RESTING_HEIGHT + jumpHeight - squash * FOOT_OFFSET;
 
       renderer.render(scene, camera);
       animId = requestAnimationFrame(animate);
@@ -517,6 +541,7 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     // Cleanup
     return () => {
       cancelAnimationFrame(animId);
+      jumpElapsed.current = null;
       resizeObserver.disconnect();
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('touchmove', onTouchMove);
@@ -529,8 +554,9 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
   }, []);
 
   const handleClick = () => {
+    if (jumpElapsed.current !== null) return;
     mcAudio.playPop();
-    isClickJumping.current = 1.0;
+    jumpElapsed.current = 0;
   };
 
   return (
@@ -543,7 +569,7 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          handleClick();
+          if (!event.repeat) handleClick();
         }
       }}
       title="Minecraft Steve — Move your mouse to look around! (Click to jump)"
