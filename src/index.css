@@ -83,7 +83,7 @@ h1[tabindex="-1"]:focus {
 @media (min-width: 900px) {
   .main-menu-character {
     position: absolute;
-    left: calc(50% + 230px);
+    left: min(calc(50% + 260px), calc(100% - 180px));
     bottom: 20px;
     width: 180px;
     height: 260px;
