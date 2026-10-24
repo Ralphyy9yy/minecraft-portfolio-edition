@@ -21,6 +21,7 @@ function createSteveTexture(drawFn: (ctx: CanvasRenderingContext2D) => void): TH
   const ctx = canvas.getContext('2d')!;
   drawFn(ctx);
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
   return texture;
@@ -73,7 +74,7 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     rimLight.position.set(-3, 1, 2);
     scene.add(rimLight);
 
-    // 3. Official Minecraft Steve Skin Textures (16x16 pixel grid)
+    // 3. Pixel-art character textures (16x16 pixel grid)
     const hairDark = '#2c1a0e';
     const hairMid = '#3b2413';
     const hairLight = '#4c2e17';
@@ -199,97 +200,118 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
       ctx.fillRect(0, 0, 16, 4);
     });
 
-    // Torso Front Face: Official Steve Cyan Shirt
-    const cyanBase = '#00a8a8';
-    const cyanLight = '#14baba';
-    const cyanDark = '#008b8b';
-    const cyanShadow = '#007575';
+    // Charcoal hoodie with emerald drawstrings and a small chest badge.
+    const hoodieBase = '#202629';
+    const hoodieLight = '#343e43';
+    const hoodieDark = '#141a1d';
+    const emerald = '#23d48d';
+    const emeraldDark = '#11965f';
 
     const steveBodyFront = createSteveTexture((ctx) => {
-      ctx.fillStyle = cyanBase;
+      ctx.fillStyle = hoodieBase;
       ctx.fillRect(0, 0, 16, 16);
-      for (let x = 0; x < 16; x += 2) {
-        for (let y = 0; y < 16; y += 2) {
-          const rand = Math.random();
-          if (rand > 0.6) {
-            ctx.fillStyle = cyanLight;
-            ctx.fillRect(x, y, 2, 2);
-          } else if (rand < 0.25) {
-            ctx.fillStyle = cyanDark;
-            ctx.fillRect(x, y, 2, 2);
-          }
-        }
-      }
-      // Steve's V-Neck / Collar Cutout
+      // Shoulder highlights and the hood's collar opening.
+      ctx.fillStyle = hoodieLight;
+      ctx.fillRect(0, 0, 5, 2);
+      ctx.fillRect(11, 0, 5, 2);
+      ctx.fillStyle = hoodieDark;
+      ctx.fillRect(5, 0, 6, 3);
       ctx.fillStyle = skinBase;
-      ctx.fillRect(6, 0, 4, 4);
-      ctx.fillRect(7, 4, 2, 2);
-      ctx.fillStyle = skinShadow;
-      ctx.fillRect(7, 0, 2, 2);
-      // Bottom shirt hem
-      ctx.fillStyle = cyanShadow;
-      ctx.fillRect(0, 15, 16, 1);
+      ctx.fillRect(6, 0, 4, 2);
+      // Zipper seam, pocket, and ribbed hem.
+      ctx.fillStyle = hoodieDark;
+      ctx.fillRect(7, 3, 2, 13);
+      ctx.fillRect(2, 10, 12, 4);
+      ctx.fillRect(0, 14, 16, 2);
+      ctx.fillStyle = hoodieLight;
+      ctx.fillRect(7, 4, 1, 10);
+      ctx.fillRect(3, 10, 3, 1);
+      ctx.fillRect(10, 10, 3, 1);
+      // Emerald drawstrings with light tips.
+      ctx.fillStyle = emerald;
+      ctx.fillRect(5, 3, 1, 4);
+      ctx.fillRect(10, 3, 1, 4);
+      ctx.fillRect(12, 5, 3, 3);
+      ctx.fillStyle = hoodieDark;
+      ctx.fillRect(13, 6, 1, 1);
+      ctx.fillStyle = '#e8edf0';
+      ctx.fillRect(5, 7, 1, 1);
+      ctx.fillRect(10, 7, 1, 1);
     });
 
-    // Torso Back & Sides
+    // Folded hood silhouette and restrained fabric seams on the back.
     const steveBodyBack = createSteveTexture((ctx) => {
-      ctx.fillStyle = cyanBase;
+      ctx.fillStyle = hoodieBase;
       ctx.fillRect(0, 0, 16, 16);
-      for (let x = 0; x < 16; x += 2) {
-        for (let y = 0; y < 16; y += 2) {
-          ctx.fillStyle = Math.random() > 0.5 ? cyanLight : cyanDark;
-          ctx.fillRect(x, y, 2, 2);
-        }
-      }
+      ctx.fillStyle = hoodieDark;
+      ctx.fillRect(3, 0, 10, 5);
+      ctx.fillRect(5, 5, 6, 2);
+      ctx.fillRect(0, 14, 16, 2);
+      ctx.fillStyle = hoodieLight;
+      ctx.fillRect(4, 1, 8, 1);
+      ctx.fillRect(5, 5, 6, 1);
+      ctx.fillRect(2, 8, 1, 5);
+      ctx.fillRect(13, 8, 1, 5);
     });
 
-    // Arm Texture: Cyan short sleeve top, skin tone arms
-    const steveArmTex = createSteveTexture((ctx) => {
-      ctx.fillStyle = cyanBase;
-      ctx.fillRect(0, 0, 16, 7);
-      ctx.fillStyle = cyanLight;
-      ctx.fillRect(2, 2, 12, 3);
-      ctx.fillStyle = cyanShadow;
-      ctx.fillRect(0, 6, 16, 1);
+    const hoodieSideTex = createSteveTexture((ctx) => {
+      ctx.fillStyle = hoodieBase;
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = hoodieLight;
+      ctx.fillRect(3, 1, 2, 11);
+      ctx.fillStyle = hoodieDark;
+      ctx.fillRect(12, 0, 4, 16);
+      ctx.fillRect(0, 14, 16, 2);
+    });
 
+    // Long sleeves, emerald cuff trim, and exposed hands.
+    const steveArmTex = createSteveTexture((ctx) => {
+      ctx.fillStyle = hoodieBase;
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = hoodieLight;
+      ctx.fillRect(2, 1, 3, 9);
+      ctx.fillStyle = hoodieDark;
+      ctx.fillRect(12, 0, 4, 13);
+      ctx.fillRect(0, 12, 16, 1);
+      ctx.fillStyle = emeraldDark;
+      ctx.fillRect(0, 11, 16, 1);
       ctx.fillStyle = skinBase;
-      ctx.fillRect(0, 7, 16, 9);
+      ctx.fillRect(0, 13, 16, 3);
       ctx.fillStyle = skinHighlight;
-      ctx.fillRect(2, 8, 4, 6);
+      ctx.fillRect(2, 13, 4, 2);
       ctx.fillStyle = skinShadow;
       ctx.fillRect(0, 15, 16, 1);
     });
 
-    // Leg Texture: Classic Minecraft Blue Jeans & Grey Shoes
-    const jeanBase = '#2b347e';
-    const jeanDark = '#212863';
-    const jeanLight = '#3b47a0';
-    const shoeBase = '#505050';
-    const shoeDark = '#383838';
+    // Dark gray denim and white low-top sneakers.
+    const jeanBase = '#343942';
+    const jeanDark = '#232830';
+    const jeanLight = '#454e59';
+    const shoeBase = '#e8edf0';
+    const shoeShadow = '#aebbc5';
 
     const steveLegTex = createSteveTexture((ctx) => {
-      // Blue Jeans (Top 12 pixels)
       ctx.fillStyle = jeanBase;
       ctx.fillRect(0, 0, 16, 12);
-      for (let x = 0; x < 16; x += 2) {
-        for (let y = 0; y < 12; y += 2) {
-          const r = Math.random();
-          if (r > 0.6) {
-            ctx.fillStyle = jeanLight;
-            ctx.fillRect(x, y, 2, 2);
-          } else if (r < 0.3) {
-            ctx.fillStyle = jeanDark;
-            ctx.fillRect(x, y, 2, 2);
-          }
-        }
-      }
-
-      // Grey Shoes / Boots (Bottom 4 pixels)
+      ctx.fillStyle = jeanDark;
+      ctx.fillRect(0, 0, 2, 12);
+      ctx.fillRect(14, 0, 2, 12);
+      ctx.fillRect(0, 0, 16, 1);
+      ctx.fillStyle = jeanLight;
+      ctx.fillRect(3, 2, 1, 8);
+      ctx.fillRect(5, 6, 5, 1);
+      ctx.fillRect(8, 10, 5, 1);
+      // Light uppers, gray laces, and a bright sole.
       ctx.fillStyle = shoeBase;
       ctx.fillRect(0, 12, 16, 4);
-      ctx.fillStyle = shoeDark;
-      ctx.fillRect(0, 14, 16, 2);
-      ctx.fillRect(2, 12, 4, 2);
+      ctx.fillStyle = shoeShadow;
+      ctx.fillRect(5, 12, 6, 1);
+      ctx.fillRect(6, 13, 4, 1);
+      ctx.fillRect(0, 14, 16, 1);
+      ctx.fillStyle = emeraldDark;
+      ctx.fillRect(12, 12, 2, 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 15, 16, 1);
     });
 
     // Mini Grass Block Pedestal Textures
@@ -364,10 +386,10 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
 
     // --- B. TORSO / BODY (8x12x4 proportions) ---
     const bodyMaterials: THREE.Material[] = [
-      new THREE.MeshLambertMaterial({ color: 0x008b8b }),    // right
-      new THREE.MeshLambertMaterial({ color: 0x008b8b }),    // left
-      new THREE.MeshLambertMaterial({ color: 0x00a8a8 }),    // top
-      new THREE.MeshLambertMaterial({ color: 0x007575 }),    // bottom
+      new THREE.MeshLambertMaterial({ map: hoodieSideTex }), // right
+      new THREE.MeshLambertMaterial({ map: hoodieSideTex }), // left
+      new THREE.MeshLambertMaterial({ color: hoodieBase }), // top
+      new THREE.MeshLambertMaterial({ color: hoodieDark }), // bottom
       new THREE.MeshLambertMaterial({ map: steveBodyFront }), // front
       new THREE.MeshLambertMaterial({ map: steveBodyBack }),  // back
     ];
@@ -378,9 +400,24 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
     bodyMesh.castShadow = true;
     steveGroup.add(bodyMesh);
 
+    // A folded hood gives the outfit depth without covering the face or hair.
+    const hoodMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.78, 0.24, 0.26),
+      new THREE.MeshLambertMaterial({ color: hoodieLight }),
+    );
+    hoodMesh.position.set(0, 0.5, -0.3);
+    hoodMesh.castShadow = true;
+    steveGroup.add(hoodMesh);
+
     // --- C. ARMS (4x12x4 each, with shoulder pivots) ---
     const armGeo = new THREE.BoxGeometry(0.38, 1.1, 0.38);
-    const armMat = new THREE.MeshLambertMaterial({ map: steveArmTex });
+    const sleeveMat = new THREE.MeshLambertMaterial({ map: steveArmTex });
+    const armMat = [
+      sleeveMat, sleeveMat,
+      new THREE.MeshLambertMaterial({ color: hoodieBase }),
+      new THREE.MeshLambertMaterial({ color: skinShadow }),
+      sleeveMat, sleeveMat,
+    ];
 
     // Left Arm Group (pivot at shoulder y = 0.55)
     const leftArmGroup = new THREE.Group();
@@ -402,7 +439,13 @@ export const InteractiveMinecraftCharacter: React.FC<InteractiveMinecraftCharact
 
     // --- D. LEGS (4x12x4 each, with hip pivots) ---
     const legGeo = new THREE.BoxGeometry(0.38, 1.1, 0.38);
-    const legMat = new THREE.MeshLambertMaterial({ map: steveLegTex });
+    const denimMat = new THREE.MeshLambertMaterial({ map: steveLegTex });
+    const legMat = [
+      denimMat, denimMat,
+      new THREE.MeshLambertMaterial({ color: jeanDark }),
+      new THREE.MeshLambertMaterial({ color: shoeShadow }),
+      denimMat, denimMat,
+    ];
 
     // Left Leg Group (pivot at hip y = -0.45)
     const leftLegGroup = new THREE.Group();
