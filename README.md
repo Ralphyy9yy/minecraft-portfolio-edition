@@ -99,6 +99,12 @@ Static images and audio are located in `public/`. Keep referenced filenames unch
 
 Open **Play Minecraft** for a small voxel building world. On desktop, click **Enter World** to capture the mouse. Use WASD to move, Ctrl to sprint, Space to jump, left click to mine, and right click to place. Select blocks with the mouse wheel or keys 1–9. On touch devices, hold a D-pad arrow to move and swipe the world with another finger to look around simultaneously. Slide between D-pad arrows to change direction without lifting your thumb. Jump, mine, and place have separate buttons; the control mode can be changed in the pause menu.
 
+- **Project chests:** Three labeled chests near spawn feature ALERTU, BugReplay, and this portfolio. Aim within six blocks, then press E / left click (desktop) or tap Open Chest (touch). The paused viewer shows the existing project image, case study, and source/demo links. Chests are read-only exhibits, not editable blocks, and do not change the saved-world format.
+- **Placement preview:** A translucent version of the selected block shows the placement location. Green means valid; red indicates an occupied space, player collision, bounds, or block-limit restriction. Out-of-reach targets display a warning. Preview and placement use the same validation.
+- **Shelter reward:** Completing the shelter unlocks a Builder badge and a short pixel-particle celebration. Loading an already-completed shelter shows its badge without replaying the animation. Reduced-motion preferences disable the particles.
+- **Get unstuck:** Return to Spawn in the pause menu resets position, look direction, and movement without resetting builds or saves.
+- **Controls guide:** Press H or use ? HELP / Controls & Help to reopen desktop or touch instructions, including the Windows laptop touchpad sensitivity tip.
+
 - **Pause:** Escape, the pause button, changing tabs, or losing window focus freezes the simulation and clears movement input.
 - **Local saves:** The complete block layout saves after edits, when pausing, and when leaving the game. Reloading or reopening Play restores it. Saves use `localStorage` under `ralphcraft.sandbox.v1`; they belong to the current browser and site origin, not a cloud account. Browser storage restrictions or quota errors are reported in the HUD. Clearing site data removes the save.
 - **Reset World:** Open the pause menu and confirm **Reset World** to replace the saved terrain and challenge progress. An unreadable or unsupported save is preserved until an explicit reset.

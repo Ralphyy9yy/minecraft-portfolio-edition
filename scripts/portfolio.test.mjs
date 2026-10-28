@@ -3,6 +3,7 @@ import { access, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
 import React from 'react';
+import * as THREE from 'three';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
@@ -13,6 +14,10 @@ let ProjectsScreen;
 let MainMenu;
 let sandbox;
 let TouchInput;
+let experience;
+let ProjectChestPanel;
+let SandboxControls;
+let createProjectChests;
 
 before(async () => {
   server = await createServer({
@@ -27,6 +32,130 @@ before(async () => {
   ({ MainMenu } = await server.ssrLoadModule('/src/components/MainMenu.tsx'));
   sandbox = await server.ssrLoadModule('/src/game/sandbox.ts');
   ({ TouchInput } = await server.ssrLoadModule('/src/game/touchInput.ts'));
+  experience = await server.ssrLoadModule('/src/game/sandboxExperience.ts');
+  ({ ProjectChestPanel, SandboxControls } = await server.ssrLoadModule('/src/components/SandboxPanels.tsx'));
+  ({ createProjectChests } = await server.ssrLoadModule('/src/game/projectChests.ts'));
+});
+
+test('project chests reference the three featured projects without changing world block types', () => {
+  assert.deepEqual(experience.PROJECT_CHESTS.map((chest) => chest.id), ['alertu', 'bugreplay', 'minecraft-portfolio']);
+  const positions = new Set();
+  for (const chest of experience.PROJECT_CHESTS) {
+    assert.equal(chest.project.id, chest.id);
+    assert.ok(chest.project.caseStudy.image);
+    assert.ok(chest.project.github.startsWith('https://github.com/'));
+    assert.ok(chest.x !== 0 || chest.z !== 0, 'chests must not occupy spawn');
+    positions.add(`${chest.x},${chest.z}`);
+  }
+  assert.equal(positions.size, 3);
+  assert.equal(sandbox.BlockType.GLASS, 9, 'existing save format stays unchanged');
+});
+
+test('placement preview rejects exactly the invalid destinations used by placement', () => {
+  const cell = { x: 0, y: 8, z: -4 };
+  const player = { x: 0, y: 9.13, z: 0 };
+  const check = (overrides = {}) => {
+    const args = { cell, player, distance: 6, occupied: false, count: 1, ...overrides };
+    return experience.placementFeedback(args.cell, args.player, args.distance, args.occupied, args.count);
+  };
+  assert.equal(check(), '');
+  assert.match(check({ distance: 6.01 }), /Out of reach/);
+  assert.match(check({ cell: { ...cell, x: 33 } }), /Outside/);
+  assert.match(check({ cell: { ...cell, y: -1 } }), /Outside/);
+  assert.match(check({ occupied: true }), /occupied/);
+  assert.match(check({ count: sandbox.MAX_BLOCKS }), /limit/);
+  assert.match(check({ cell: { x: 0, y: 8, z: 0 } }), /trap/);
+  assert.equal(check({ cell: { x: 0, y: 7, z: 0 } }), '', 'block below feet remains placeable');
+});
+
+test('chests have solid targetable bodies, non-blocking labels, and respect nearer voxel occlusion', () => {
+  const originalDocument = globalThis.document;
+  let chests;
+  const context = { fillRect() {}, strokeRect() {}, fillText() {} };
+  try {
+    // Canvas label drawing is stubbed; real Three.js geometry and raycasting are exercised below.
+    globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => context }) };
+    chests = createProjectChests((_x, y) => y === 5 ? sandbox.BlockType.GRASS : undefined);
+    assert.deepEqual(chests.cells.map((cell) => cell.y), [6, 6, 6]);
+    assert.equal(chests.group.children.filter((object) => object instanceof THREE.Sprite).length, 3);
+    chests.group.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster(new THREE.Vector3(0, 6, 0), new THREE.Vector3(0, 0, -1));
+    const hit = ray.intersectObject(chests.group, true)[0];
+    assert.equal(hit.object.userData.projectIndex, 1);
+    assert.equal(experience.projectWithinReach(hit.object.userData.projectIndex, hit.distance).id, 'bugreplay');
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+    wall.position.set(0, 6, -0.8);
+    wall.updateMatrixWorld(true);
+    const nearest = ray.intersectObjects([wall, chests.group], true)[0];
+    assert.equal(nearest.object, wall);
+    assert.equal(experience.projectWithinReach(nearest.object.userData.projectIndex, nearest.distance), null);
+    wall.geometry.dispose();
+    wall.material.dispose();
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    chests?.group.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.geometry.dispose();
+      if (object.material) { object.material.map?.dispose(); object.material.dispose(); }
+    });
+  }
+});
+
+test('only valid project targets within six blocks can open a chest', () => {
+  assert.equal(experience.projectWithinReach(0, 6).id, 'alertu');
+  for (const [index, distance] of [[0, 6.01], [0, -1], [0, NaN], [-1, 1], [3, 1], [0.5, 1], ['0', 1], [undefined, 1]]) {
+    assert.equal(experience.projectWithinReach(index, distance), null);
+  }
+});
+
+test('return-to-spawn height clears the highest center block without editing the world', () => {
+  const blocks = new Map([['0,7,0', sandbox.BlockType.GRASS], ['0,14,0', sandbox.BlockType.GLASS]]);
+  const getBlock = (x, y, z) => blocks.get(`${x},${y},${z}`);
+  const original = [...blocks];
+  assert.equal(experience.highestBlock(0, 0, getBlock), 14);
+  assert.ok(experience.spawnHeight(getBlock) - 1.62 > 14.5);
+  assert.deepEqual([...blocks], original);
+  assert.equal(experience.spawnHeight(() => undefined), 5);
+  assert.equal(experience.spawnHeight(() => sandbox.BlockType.AIR), 5);
+});
+
+test('shelter celebration fires once for new completion, not for restored completed shelters', () => {
+  const fresh = experience.createShelterReward();
+  assert.equal(fresh(false), false);
+  assert.equal(fresh(false), false);
+  assert.equal(fresh(true), true);
+  assert.equal(fresh(true), false);
+  assert.equal(fresh(false), false);
+  assert.equal(fresh(true), false);
+  const restored = experience.createShelterReward();
+  assert.equal(restored(true), false);
+  assert.equal(restored(false), false);
+  assert.equal(restored(true), false);
+});
+
+test('project chest viewers use real images, case studies and only existing demo links', () => {
+  for (const { project } of experience.PROJECT_CHESTS) {
+    const html = renderToStaticMarkup(React.createElement(ProjectChestPanel, { project, onClose() {} }));
+    assert.ok(html.includes(project.caseStudy.image));
+    assert.ok(html.includes(project.github));
+    assert.ok(html.includes('Engineering challenge'));
+    assert.ok(html.includes('Back to Game'));
+    assert.equal(html.includes('Live Demo'), Boolean(project.demo));
+    assert.equal((html.match(/target="_blank"/g) ?? []).length, project.demo ? 2 : 1);
+    assert.equal((html.match(/rel="noopener noreferrer"/g) ?? []).length, project.demo ? 2 : 1);
+  }
+});
+
+test('controls guide covers laptop input, touch interaction, recovery and help', () => {
+  const desktop = renderToStaticMarkup(React.createElement(SandboxControls, { touch: false, onClose() {} }));
+  assert.ok(desktop.includes('Most sensitive'));
+  assert.ok(desktop.includes('WASD'));
+  assert.ok(desktop.includes('press E'));
+  assert.ok(desktop.includes('Return to Spawn'));
+  const touch = renderToStaticMarkup(React.createElement(SandboxControls, { touch: true, onClose() {} }));
+  assert.ok(touch.includes('another finger'));
+  assert.ok(touch.includes('Open Chest'));
+  assert.ok(touch.includes('Return to Spawn'));
 });
 
 test('touch movement, camera look, and jump track independent fingers in either order', () => {

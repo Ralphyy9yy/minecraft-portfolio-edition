@@ -3,7 +3,11 @@ import * as THREE from 'three';
 import { mcAudio } from '../utils/audio';
 import { useDialog } from '../hooks/useDialog';
 import { MoveControl, TouchInput } from '../game/touchInput';
-import { BlockType, BUILD_HEIGHT, MAX_BLOCKS, SHELTER_PLAN, SavedBlock, WorldLoad, cycleSlot, inBuildBounds, loadWorld, saveWorld, shelterProgress, simulationStep } from '../game/sandbox';
+import { Project } from '../data/portfolioData';
+import { ProjectChestPanel, SandboxControls } from './SandboxPanels';
+import { createProjectChests } from '../game/projectChests';
+import { INTERACTION_REACH, PROJECT_CHESTS, createShelterReward, placementFeedback, projectWithinReach, spawnHeight } from '../game/sandboxExperience';
+import { BlockType, SHELTER_PLAN, SavedBlock, WorldLoad, cycleSlot, loadWorld, saveWorld, shelterProgress, simulationStep } from '../game/sandbox';
 export { BlockType } from '../game/sandbox';
 
 interface MinecraftGameProps {
@@ -207,6 +211,11 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
   const [showGuides, setShowGuides] = useState(true);
   const [confirmReset, setConfirmReset] = useState(false);
   const [worldRevision, setWorldRevision] = useState(0);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [targetHint, setTargetHint] = useState({ kind: 'idle', message: 'Aim at a block to build, or a project chest to explore' });
+  const [builderUnlocked, setBuilderUnlocked] = useState(false);
+  const [showReward, setShowReward] = useState(false);
   const activeRef = useRef(false);
   const pausedRef = useRef(false);
   const touchModeRef = useRef(isTouchDevice);
@@ -226,10 +235,17 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     setIsPaused(true);
     if (document.pointerLockElement === containerRef.current?.querySelector('canvas')) document.exitPointerLock();
   };
-  const pauseDialogRef = useDialog(isPaused, () => { if (confirmReset) setConfirmReset(false); else resumeGame(); });
+  const pauseDialogRef = useDialog(isPaused, () => {
+    if (confirmReset) setConfirmReset(false);
+    else if (selectedProject) setSelectedProject(null);
+    else if (showHelp) setShowHelp(false);
+    else resumeGame();
+  });
 
   const performMineRef = useRef<() => void>(() => {});
   const performPlaceRef = useRef<() => void>(() => {});
+  const interactRef = useRef<() => void>(() => {});
+  const returnToSpawnRef = useRef<() => void>(() => {});
   const mobileMoveRef = useRef({
     forward: false,
     backward: false,
@@ -295,6 +311,9 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     container.appendChild(renderer.domElement);
     activeRef.current = touchModeRef.current && !pausedRef.current;
     let disposed = false;
+    let rewardTimer: ReturnType<typeof setTimeout> | undefined;
+    setShowReward(false);
+    setBuilderUnlocked(false);
 
     // 2. Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
@@ -618,6 +637,11 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       }
     });
 
+    const getBlock = (x: number, y: number, z: number) => worldMap.get(getCoordKey(x, y, z))?.type;
+    const chests = createProjectChests(getBlock);
+    scene.add(chests.group);
+    const chestCells = new Set(chests.cells.map((cell) => getCoordKey(cell.x, cell.y, cell.z)));
+
     const guideMaterial = new THREE.LineBasicMaterial({ color: 0x83ffe0, transparent: true, opacity: 0.32, depthWrite: false });
     const guideGeometry = new THREE.EdgesGeometry(boxGeometry);
     const guideGroup = new THREE.Group();
@@ -628,10 +652,16 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       return { cell, outline };
     });
     scene.add(guideGroup);
+    const awardShelter = createShelterReward();
     const updateChallenge = () => {
-      const getBlock = (x: number, y: number, z: number) => worldMap.get(getCoordKey(x, y, z))?.type;
       const progress = shelterProgress(getBlock);
       setChallenge(progress);
+      if (progress.complete) setBuilderUnlocked(true);
+      if (awardShelter(progress.complete)) {
+        setShowReward(true);
+        clearTimeout(rewardTimer);
+        rewardTimer = setTimeout(() => { if (!disposed) setShowReward(false); }, 6500);
+      }
       const nextPart = progress.floor < 25 ? 'floor' : progress.walls < 30 ? 'walls' : 'roof';
       for (const { cell, outline } of guideCells) outline.visible = cell.part === nextPart && !getBlock(cell.x, cell.y, cell.z);
     };
@@ -728,11 +758,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
     // 8. Player Controls & AABB Collision Physics
     const respawn = () => {
-      let ground = -1;
-      for (let y = BUILD_HEIGHT; y >= 0; y--) {
-        if (worldMap.has(getCoordKey(0, y, 0))) { ground = y; break; }
-      }
-      camera.position.set(0, Math.max(ground + 0.5 + 1.62 + 0.01, 5), 0);
+      camera.position.set(0, spawnHeight(getBlock), 0);
     };
     respawn();
     let playerYaw = 0;
@@ -758,6 +784,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Escape') { if (activeRef.current) pauseGame(); return; }
       if (!activeRef.current || pausedRef.current) return;
+      if (e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) interactRef.current(); return; }
+      if (e.code === 'KeyH') { e.preventDefault(); pauseGame(); setShowHelp(true); return; }
       if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ControlLeft', 'ControlRight'].includes(e.code)) e.preventDefault();
       keys[e.code] = true;
       if (e.key >= '1' && e.key <= '9') {
@@ -843,6 +871,16 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       playerVelocity.x = playerVelocity.z = 0;
       stepTimer = 0;
     };
+    returnToSpawnRef.current = () => {
+      clearInputsRef.current();
+      respawn();
+      playerVelocity.set(0, 0, 0);
+      isOnGround = false;
+      walkCycle = 0;
+      playerYaw = 0;
+      playerPitch = -0.22;
+      camera.rotation.set(playerPitch, playerYaw, 0, 'YXZ');
+    };
     const onBlur = () => { if (activeRef.current) pauseGame(); };
     const onVisibilityChange = () => { if (document.hidden) { pauseGame(); flushSave(); } };
     const onPageHide = () => flushSave(false);
@@ -862,14 +900,66 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     highlightMesh.visible = false;
     scene.add(highlightMesh);
 
+    const previewMaterials = HOTBAR_BLOCKS.map((block) => {
+      const original = blockMaterials[block.type];
+      const clone = (material: THREE.Material) => {
+        const preview = material.clone();
+        preview.transparent = true;
+        preview.opacity = 0.38;
+        preview.depthWrite = false;
+        return preview;
+      };
+      return Array.isArray(original) ? original.map(clone) : clone(original);
+    });
+    const placementPreview = new THREE.Mesh(boxGeometry, previewMaterials[0]);
+    placementPreview.scale.setScalar(1.005);
+    placementPreview.visible = false;
+    scene.add(placementPreview);
+    const targetGroups = [blockGroup, chests.group];
+    const getTarget = () => {
+      raycaster.setFromCamera(screenCenter, camera);
+      return raycaster.intersectObjects(targetGroups, true)[0];
+    };
+    const getPlacement = (hit: THREE.Intersection) => {
+      const cell = hit.object.userData.voxelCoord;
+      if (!cell || !hit.face) return null;
+      const position = {
+        x: cell.x + Math.round(hit.face.normal.x),
+        y: cell.y + Math.round(hit.face.normal.y),
+        z: cell.z + Math.round(hit.face.normal.z),
+      };
+      const key = getCoordKey(position.x, position.y, position.z);
+      return {
+        position, key,
+        feedback: placementFeedback(position, playerPos, hit.distance, worldMap.has(key) || chestCells.has(key), worldMap.size),
+      };
+    };
+    const openTargetProject = (hit: THREE.Intersection | undefined) => {
+      if (!hit) return false;
+      const project = projectWithinReach(hit.object.userData.projectIndex, hit.distance);
+      if (!project) return false;
+      pauseGame();
+      setSelectedProject(project);
+      return true;
+    };
+    interactRef.current = () => {
+      if (activeRef.current && !pausedRef.current) openTargetProject(getTarget());
+    };
+    let lastHint = '';
+    const updateHint = (kind: string, message: string) => {
+      if (`${kind}:${message}` === lastHint) return;
+      lastHint = `${kind}:${message}`;
+      setTargetHint({ kind, message });
+    };
+
     // Actions: Mine Block & Place Block (supports desktop click & mobile PE buttons)
     const performMine = () => {
       if (!activeRef.current || pausedRef.current) return;
+      const target = getTarget();
+      if (openTargetProject(target)) return;
       triggerPunch();
-      raycaster.setFromCamera(screenCenter, camera);
-      const intersects = raycaster.intersectObjects(blockGroup.children);
-      if (intersects.length > 0 && intersects[0].distance <= 6.0) {
-        const hit = intersects[0];
+      if (target && target.distance <= INTERACTION_REACH) {
+        const hit = target;
         const { voxelCoord, type } = hit.object.userData;
         if (!voxelCoord) return;
 
@@ -903,51 +993,17 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
     const performPlace = () => {
       if (!activeRef.current || pausedRef.current) return;
+      const target = getTarget();
+      const placement = target && getPlacement(target);
+      if (!placement || placement.feedback) return;
       triggerPunch();
-      raycaster.setFromCamera(screenCenter, camera);
-      const intersects = raycaster.intersectObjects(blockGroup.children);
-      if (intersects.length > 0 && intersects[0].distance <= 6.0) {
-        const hit = intersects[0];
-        const { voxelCoord } = hit.object.userData;
-        if (!voxelCoord || !hit.face) return;
-
-        const placeX = voxelCoord.x + Math.round(hit.face.normal.x);
-        const placeY = voxelCoord.y + Math.round(hit.face.normal.y);
-        const placeZ = voxelCoord.z + Math.round(hit.face.normal.z);
-        if (!inBuildBounds(placeX, placeY, placeZ) || worldMap.size >= MAX_BLOCKS) return;
-
-        // Player collision test (prevent placing inside player)
-        const pMinX = playerPos.x - 0.35;
-        const pMaxX = playerPos.x + 0.35;
-        const pMinY = playerPos.y - 1.62;
-        const pMaxY = playerPos.y + 0.18;
-        const pMinZ = playerPos.z - 0.35;
-        const pMaxZ = playerPos.z + 0.35;
-
-        const bMinX = placeX - 0.5;
-        const bMaxX = placeX + 0.5;
-        const bMinY = placeY - 0.5;
-        const bMaxY = placeY + 0.5;
-        const bMinZ = placeZ - 0.5;
-        const bMaxZ = placeZ + 0.5;
-
-        const collidesWithPlayer =
-          pMinX < bMaxX && pMaxX > bMinX &&
-          pMinY < bMaxY && pMaxY > bMinY &&
-          pMinZ < bMaxZ && pMaxZ > bMinZ;
-
-        if (collidesWithPlayer) return;
-
-        const placeKey = getCoordKey(placeX, placeY, placeZ);
-        if (!worldMap.has(placeKey)) {
-          const selectedDef = HOTBAR_BLOCKS[selectedSlotRef.current];
-          sfxEngine.playPlace();
-          const newMesh = spawnMeshForVoxel(placeX, placeY, placeZ, selectedDef.type);
-          worldMap.set(placeKey, { type: selectedDef.type, mesh: newMesh });
-          updateChallenge();
-          queueSave();
-        }
-      }
+      const { x, y, z } = placement.position;
+      const selectedDef = HOTBAR_BLOCKS[selectedSlotRef.current];
+      sfxEngine.playPlace();
+      const newMesh = spawnMeshForVoxel(x, y, z, selectedDef.type);
+      worldMap.set(placement.key, { type: selectedDef.type, mesh: newMesh });
+      updateChallenge();
+      queueSave();
     };
 
     performMineRef.current = performMine;
@@ -978,7 +1034,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     const isSolidBlockAt = (x: number, y: number, z: number) => {
       const key = getCoordKey(Math.round(x), Math.round(y), Math.round(z));
       const b = worldMap.get(key);
-      return !!b && b.type !== BlockType.AIR;
+      return chestCells.has(key) || (!!b && b.type !== BlockType.AIR);
     };
 
     const collidesWithWorld = (px: number, py: number, pz: number) => {
@@ -1024,18 +1080,36 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       // Slowly drift clouds
       cloudGroup.position.x = simulationTime % 44;
 
-      // Update targeting wireframe
-      raycaster.setFromCamera(screenCenter, camera);
-      const intersects = raycaster.intersectObjects(blockGroup.children);
-      if (intersects.length > 0 && intersects[0].distance <= 5.5) {
-        const { voxelCoord } = intersects[0].object.userData;
-        if (voxelCoord) {
-          highlightMesh.position.set(voxelCoord.x, voxelCoord.y, voxelCoord.z);
+      // Aiming feedback and actions share the same nearest-hit and placement checks.
+      const target = getTarget();
+      highlightMesh.visible = false;
+      placementPreview.visible = false;
+      if (target) {
+        const projectIndex = target.object.userData.projectIndex;
+        const cell = typeof projectIndex === 'number' ? chests.cells[projectIndex] : target.object.userData.voxelCoord;
+        if (cell) {
+          highlightMesh.position.set(cell.x, cell.y, cell.z);
           highlightMesh.visible = true;
+          highlightMesh.material.color.set(target.distance > INTERACTION_REACH ? '#ff7373' : '#fff0a3');
         }
-      } else {
-        highlightMesh.visible = false;
-      }
+        if (target.distance > INTERACTION_REACH) {
+          updateHint('blocked', 'Out of reach — move closer');
+        } else if (typeof projectIndex === 'number') {
+          updateHint('project', `${PROJECT_CHESTS[projectIndex].label} — ${touchModeRef.current ? 'tap Open Chest' : 'E / left click to open'}`);
+        } else {
+          const placement = getPlacement(target);
+          if (placement) {
+            placementPreview.position.set(placement.position.x, placement.position.y, placement.position.z);
+            placementPreview.material = previewMaterials[selectedSlotRef.current];
+            const materials = Array.isArray(placementPreview.material) ? placementPreview.material : [placementPreview.material];
+            for (const material of materials) {
+              if (material instanceof THREE.MeshLambertMaterial) material.color.set(placement.feedback ? '#ff6161' : '#9affe0');
+            }
+            placementPreview.visible = true;
+            updateHint(placement.feedback ? 'blocked' : 'block', placement.feedback || `Place ${HOTBAR_BLOCKS[selectedSlotRef.current].name}`);
+          }
+        }
+      } else updateHint('idle', 'Aim at a block to build, or a project chest to explore');
 
       // Update particles
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -1177,9 +1251,12 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       activeRef.current = false;
       flushSave(false);
       clearTimeout(saveTimer);
+      clearTimeout(rewardTimer);
       cancelAnimationFrame(animationFrame);
       performMineRef.current = () => {};
       performPlaceRef.current = () => {};
+      interactRef.current = () => {};
+      returnToSpawnRef.current = () => {};
       clearInputsRef.current = () => {};
       flushSaveRef.current = () => {};
       selectSlotRef.current = () => {};
@@ -1205,10 +1282,12 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         document.exitPointerLock();
       }
       const geometries = new Set<THREE.BufferGeometry>([boxGeometry, particleGeo, guideGeometry]);
-      const materials = new Set<THREE.Material>(Object.values(blockMaterials).flat());
+      const materials = new Set<THREE.Material>([...Object.values(blockMaterials).flat(), ...previewMaterials.flat()]);
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
           geometries.add(object.geometry);
+        }
+        if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments || object instanceof THREE.Sprite) {
           for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material);
         }
       });
@@ -1229,6 +1308,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
   const resumeGame = () => {
     mcAudio.playClick();
     setConfirmReset(false);
+    setSelectedProject(null);
+    setShowHelp(false);
     setControlMessage('');
     if (touchModeRef.current) {
       pausedRef.current = false;
@@ -1289,13 +1370,32 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       {!isPaused && (isLocked || isTouchDevice) && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
           <div
-            className="w-4 h-4 flex items-center justify-center text-white text-2xl font-bold select-none"
+            className={`w-4 h-4 flex items-center justify-center text-2xl font-bold select-none ${targetHint.kind === 'blocked' ? 'text-red-300' : 'text-white'}`}
             style={{ mixBlendMode: 'difference' }}
           >
             +
           </div>
         </div>
       )}
+
+      {!isPaused && (isLocked || isTouchDevice) && (
+        <div className={`sandbox-target reading-text ${targetHint.kind === 'blocked' ? 'sandbox-target--blocked' : ''}`}>
+          <p>{targetHint.message}</p>
+          {targetHint.kind === 'project' && isTouchDevice && <button
+            onClick={() => interactRef.current()}
+            className="minecraft-button pointer-events-auto px-4 h-11 mt-2 text-xs font-minecraft"
+          >Open Chest</button>}
+        </div>
+      )}
+
+      {showReward && !isPaused && <div className="sandbox-reward" role="status">
+        <div className="sandbox-reward-particles" aria-hidden="true">
+          {Array.from({ length: 14 }, (_, index) => <i key={index} style={{ '--piece': index } as React.CSSProperties} />)}
+        </div>
+        <p className="sandbox-eyebrow">ACHIEVEMENT UNLOCKED</p>
+        <p>Builder unlocked!</p>
+        <p className="reading-text text-sm">Shelter complete. Make yourself at home.</p>
+      </div>}
 
       {/* Click to Play / Resume Prompt (Desktop PC only) */}
       {!isTouchDevice && !isLocked && !isPaused && (
@@ -1330,6 +1430,10 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
             ❚❚ PAUSE
           </button>
 
+          <button onClick={() => { pauseGame(); setShowHelp(true); }} className="pe-button px-3 py-1 rounded" title="Open controls guide (H)">
+            ? HELP
+          </button>
+
           {/* Desktop/Touch Mode Toggle */}
           <button
             onClick={() => {
@@ -1348,6 +1452,9 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         <aside className="sandbox-status" aria-label="Creative sandbox status">
           <p className="text-green-200 text-[10px]">Creative Sandbox</p>
           <p className="reading-text text-xs text-gray-100" role="status">{saveMessage}</p>
+          <p className="reading-text text-xs mt-2 text-yellow-100">Three project chests near spawn. Aim at one and {isTouchDevice ? 'tap Open Chest' : 'press E'}.</p>
+          {builderUnlocked && <p className="text-[9px] mt-2 text-yellow-200">★ Builder unlocked</p>}
+          <progress className="sandbox-progress" aria-label="Shelter completion" max={SHELTER_PLAN.length} value={challenge.total} />
           <details className="mt-2">
             <summary className="text-[10px] cursor-pointer py-2">{challenge.complete ? 'Shelter built!' : `Shelter challenge: ${challenge.total}/${SHELTER_PLAN.length}`}</summary>
             <div className="reading-text text-xs space-y-2 mt-2">
@@ -1512,18 +1619,21 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         <div className="text-[9px] sm:text-[10px] text-gray-300 mc-text-shadow mt-1 text-center">
           {isTouchDevice
             ? 'Hold / slide D-Pad: Move • Swipe world with another finger: Look • ⛏️ Mine • 🧱 Place • ▲ Jump'
-            : 'WASD: Move • Ctrl: Sprint • Space: Jump • Left: Mine • Right: Place • Wheel / 1–9: Hotbar • Esc: Pause'}
+            : 'WASD: Move • Ctrl: Sprint • Space: Jump • Left: Mine • Right: Place • E: Chest • H: Help • Esc: Pause'}
         </div>
       </div>
 
       {/* Pause Menu (ESC) */}
       {isPaused && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs select-none">
-          <div ref={pauseDialogRef} role="dialog" aria-modal="true" aria-labelledby="sandbox-pause-title" tabIndex={-1} className="modal-content flex flex-col items-center gap-3 w-full max-w-sm p-4">
+          <div ref={pauseDialogRef} role="dialog" aria-modal="true" aria-labelledby="sandbox-pause-title" tabIndex={-1} className={`sandbox-dialog modal-content flex flex-col items-center gap-3 p-4 ${selectedProject || showHelp ? 'sandbox-dialog--wide' : ''}`}>
             <h2 id="sandbox-pause-title" className="text-xl font-bold text-white mc-text-shadow mb-2">
-              {confirmReset ? 'Reset World?' : 'Game Paused'}
+              {selectedProject ? selectedProject.name : showHelp ? 'Controls & Help' : confirmReset ? 'Reset World?' : 'Game Paused'}
             </h2>
 
+            {selectedProject ? <ProjectChestPanel project={selectedProject} onClose={resumeGame} /> : showHelp ? (
+              <SandboxControls touch={isTouchDevice} onClose={() => setShowHelp(false)} />
+            ) : <>
             <p className="reading-text text-sm text-gray-100 text-center" role="status">{saveMessage}</p>
             {controlMessage && <p className="reading-text text-sm text-yellow-200 text-center" role="alert">{controlMessage}</p>}
 
@@ -1544,6 +1654,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
             </button>
 
             <button onClick={() => flushSaveRef.current()} className="minecraft-button w-full h-11 text-xs">Save World</button>
+            <button onClick={() => { returnToSpawnRef.current(); resumeGame(); }} className="minecraft-button w-full h-11 text-xs">Return to Spawn</button>
+            <button onClick={() => setShowHelp(true)} className="minecraft-button w-full h-11 text-xs">Controls & Help</button>
             <button onClick={toggleControls} className="minecraft-button w-full h-11 text-xs">{isTouchDevice ? 'Use PC Controls' : 'Use Touch Controls'}</button>
             <button onClick={() => setConfirmReset(true)} className="minecraft-button w-full h-11 text-xs">Reset World…</button>
             <label className="reading-text flex items-center gap-2 text-sm text-white py-2">
@@ -1558,6 +1670,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
             </button>
               </>
             )}
+            </>}
           </div>
         </div>
       )}
