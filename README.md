@@ -97,7 +97,7 @@ Static images and audio are located in `public/`. Keep referenced filenames unch
 
 ## Creative Sandbox
 
-Open **Play Minecraft** for a small voxel building world. On desktop, click **Enter World** to capture the mouse. Use WASD to move, Ctrl to sprint, Space to jump, left click to mine, and right click to place. Select blocks with the mouse wheel or keys 1–9. Touch controls provide movement, camera look, mining, placement, and jumping; the control mode can be changed in the pause menu.
+Open **Play Minecraft** for a small voxel building world. On desktop, click **Enter World** to capture the mouse. Use WASD to move, Ctrl to sprint, Space to jump, left click to mine, and right click to place. Select blocks with the mouse wheel or keys 1–9. On touch devices, hold a D-pad arrow to move and swipe the world with another finger to look around simultaneously. Slide between D-pad arrows to change direction without lifting your thumb. Jump, mine, and place have separate buttons; the control mode can be changed in the pause menu.
 
 - **Pause:** Escape, the pause button, changing tabs, or losing window focus freezes the simulation and clears movement input.
 - **Local saves:** The complete block layout saves after edits, when pausing, and when leaving the game. Reloading or reopening Play restores it. Saves use `localStorage` under `ralphcraft.sandbox.v1`; they belong to the current browser and site origin, not a cloud account. Browser storage restrictions or quota errors are reported in the HUD. Clearing site data removes the save.

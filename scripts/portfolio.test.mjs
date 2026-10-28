@@ -12,6 +12,7 @@ let data;
 let ProjectsScreen;
 let MainMenu;
 let sandbox;
+let TouchInput;
 
 before(async () => {
   server = await createServer({
@@ -25,6 +26,70 @@ before(async () => {
   ({ ProjectsScreen } = await server.ssrLoadModule('/src/components/ProjectsScreen.tsx'));
   ({ MainMenu } = await server.ssrLoadModule('/src/components/MainMenu.tsx'));
   sandbox = await server.ssrLoadModule('/src/game/sandbox.ts');
+  ({ TouchInput } = await server.ssrLoadModule('/src/game/touchInput.ts'));
+});
+
+test('touch movement, camera look, and jump track independent fingers in either order', () => {
+  for (const lookFirst of [false, true]) {
+    const input = new TouchInput();
+    if (lookFirst) assert.equal(input.startLook(20, 100, 200), true);
+    assert.equal(input.hold(10, 'forward'), true);
+    if (!lookFirst) assert.equal(input.startLook(20, 100, 200), true);
+    input.hold(30, 'jump');
+    assert.equal(input.movement().forward, true);
+    assert.equal(input.movement().jump, true);
+    assert.deepEqual(input.moveLook(20, 130, 180), { x: 30, y: -20 });
+    assert.equal(input.moveLook(10, 10, 10), null);
+    input.endLook(30);
+    input.release(30);
+    assert.equal(input.movement().forward, true);
+    assert.equal(input.movement().jump, false);
+    assert.deepEqual(input.moveLook(20, 135, 190), { x: 5, y: 10 });
+    input.release(10);
+    assert.equal(input.movement().forward, false);
+    assert.deepEqual(input.moveLook(20, 140, 190), { x: 5, y: 0 });
+    input.endLook(20);
+    assert.equal(input.moveLook(20, 150, 190), null);
+  }
+});
+
+test('D-pad swipes change direction without releasing or stealing another finger', () => {
+  const input = new TouchInput();
+  input.hold(1, 'forward');
+  input.hold(2, 'forward');
+  assert.equal(input.slide(1, 'right'), true);
+  assert.equal(input.movement().forward, true);
+  assert.equal(input.movement().right, true);
+  assert.equal(input.release(2), true);
+  assert.equal(input.movement().forward, false);
+  assert.equal(input.movement().right, true);
+  assert.equal(input.startLook(1, 0, 0), false);
+  assert.equal(input.startLook(3, 0, 0), true);
+  assert.equal(input.hold(3, 'left'), false);
+  assert.equal(input.startLook(4, 0, 0), false);
+  assert.equal(input.slide(4, 'left'), false);
+  input.hold(5, 'jump');
+  assert.equal(input.slide(5, 'left'), false);
+  assert.equal(input.slide(1, 'jump'), false);
+});
+
+test('cancellation and pause reset cannot leave movement or look stuck', () => {
+  const input = new TouchInput();
+  input.hold(1, 'forward');
+  input.hold(2, 'jump');
+  input.startLook(3, 40, 50);
+  input.release(1); // pointercancel / lostpointercapture uses the same release path.
+  input.endLook(3);
+  assert.equal(input.movement().forward, false);
+  assert.equal(input.movement().jump, true);
+  assert.equal(input.startLook(4, 50, 60), true);
+  input.reset();
+  assert.deepEqual(input.movement(), { forward: false, backward: false, left: false, right: false, jump: false });
+  assert.equal(input.slide(2, 'forward'), false);
+  assert.equal(input.moveLook(4, 70, 80), null);
+  assert.equal(input.release(2), false);
+  assert.equal(input.startLook(5, 100, 100), true);
+  assert.deepEqual(input.moveLook(5, 101, 102), { x: 1, y: 2 });
 });
 
 test('saved worlds round-trip additions and removals without regenerating mined blocks', () => {

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { mcAudio } from '../utils/audio';
 import { useDialog } from '../hooks/useDialog';
+import { MoveControl, TouchInput } from '../game/touchInput';
 import { BlockType, BUILD_HEIGHT, MAX_BLOCKS, SHELTER_PLAN, SavedBlock, WorldLoad, cycleSlot, inBuildBounds, loadWorld, saveWorld, shelterProgress, simulationStep } from '../game/sandbox';
 export { BlockType } from '../game/sandbox';
 
@@ -237,6 +238,40 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     jump: false,
     sprint: false,
   });
+  const touchInputRef = useRef(new TouchInput());
+
+  const syncTouchMovement = () => {
+    const movement = touchInputRef.current.movement();
+    Object.assign(mobileMoveRef.current, movement);
+    setDpadActive(movement);
+  };
+
+  const movementControl = (control: MoveControl) => {
+    const release = (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (touchInputRef.current.release(event.pointerId)) syncTouchMovement();
+    };
+    return {
+      'data-move': control,
+      onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        if (!activeRef.current || pausedRef.current || event.button !== 0) return;
+        // Keep the hold even when the thumb drifts outside the button.
+        event.currentTarget.setPointerCapture(event.pointerId);
+        if (touchInputRef.current.hold(event.pointerId, control)) syncTouchMovement();
+      },
+      onPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (!activeRef.current || pausedRef.current || control === 'jump') return;
+        // Pointer capture targets the original button; hit-test to allow D-pad swipes.
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLButtonElement>('button[data-move]');
+        if (!target || target.closest('.pe-dpad-container') !== event.currentTarget.closest('.pe-dpad-container')) return;
+        const direction = target.dataset.move as MoveControl;
+        if (touchInputRef.current.slide(event.pointerId, direction)) syncTouchMovement();
+      },
+      onPointerUp: release,
+      onPointerCancel: release,
+      onLostPointerCapture: release,
+    };
+  };
 
   const selectedSlotRef = useRef(selectedSlot);
   selectedSlotRef.current = selectedSlot;
@@ -755,61 +790,30 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
     };
     window.addEventListener('mousemove', onMouseMove);
 
-    // Mobile Multi-Touch Drag Camera Look (Minecraft Pocket Edition touch tracking)
-    let lookTouchId: number | null = null;
-    let lastLookX = 0;
-    let lastLookY = 0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (!activeRef.current || pausedRef.current || !touchModeRef.current || e.target !== renderer.domElement) return;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        // Only bind look drag if touch is NOT on D-pad area (bottom-left)
-        const isDpadZone = t.clientX < 190 && t.clientY > window.innerHeight - 220;
-        if (lookTouchId === null && !isDpadZone) {
-          lookTouchId = t.identifier;
-          lastLookX = t.clientX;
-          lastLookY = t.clientY;
-        }
+    // Capture only gestures that begin on the world, not on HUD controls.
+    // Do not filter isPrimary: camera look can be the second or third finger.
+    const onLookStart = (event: PointerEvent) => {
+      if (!activeRef.current || pausedRef.current || !touchModeRef.current || event.button !== 0) return;
+      event.preventDefault();
+      if (touchInputRef.current.startLook(event.pointerId, event.clientX, event.clientY)) {
+        renderer.domElement.setPointerCapture(event.pointerId);
       }
     };
-
-    const onTouchMove = (e: TouchEvent) => {
+    const onLookMove = (event: PointerEvent) => {
       if (!activeRef.current || pausedRef.current || !touchModeRef.current) return;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        if (t.identifier === lookTouchId) {
-          const movementX = t.clientX - lastLookX;
-          const movementY = t.clientY - lastLookY;
-          lastLookX = t.clientX;
-          lastLookY = t.clientY;
-
-          const sensitivity = 0.004;
-          playerYaw -= movementX * sensitivity;
-          playerPitch -= movementY * sensitivity;
-          playerPitch = Math.max(-Math.PI / 2 + 0.04, Math.min(Math.PI / 2 - 0.04, playerPitch));
-
-          camera.rotation.set(0, 0, 0);
-          camera.rotation.order = 'YXZ';
-          camera.rotation.y = playerYaw;
-          camera.rotation.x = playerPitch;
-        }
-      }
+      const delta = touchInputRef.current.moveLook(event.pointerId, event.clientX, event.clientY);
+      if (!delta) return;
+      playerYaw -= delta.x * 0.004;
+      playerPitch -= delta.y * 0.004;
+      playerPitch = Math.max(-Math.PI / 2 + 0.04, Math.min(Math.PI / 2 - 0.04, playerPitch));
+      camera.rotation.set(playerPitch, playerYaw, 0, 'YXZ');
     };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        if (t.identifier === lookTouchId) {
-          lookTouchId = null;
-        }
-      }
-    };
-
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('touchend', onTouchEnd, { passive: true });
-    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    const onLookEnd = (event: PointerEvent) => touchInputRef.current.endLook(event.pointerId);
+    renderer.domElement.addEventListener('pointerdown', onLookStart);
+    renderer.domElement.addEventListener('pointermove', onLookMove);
+    renderer.domElement.addEventListener('pointerup', onLookEnd);
+    renderer.domElement.addEventListener('pointercancel', onLookEnd);
+    renderer.domElement.addEventListener('lostpointercapture', onLookEnd);
 
     const onPointerLockChange = () => {
       const locked = document.pointerLockElement === renderer.domElement;
@@ -835,7 +839,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       mobileMoveRef.current = { forward: false, backward: false, left: false, right: false, jump: false, sprint: false };
       setDpadActive({ forward: false, backward: false, left: false, right: false, jump: false });
       setIsSprinting(false);
-      lookTouchId = null;
+      touchInputRef.current.reset();
       playerVelocity.x = playerVelocity.z = 0;
       stepTimer = 0;
     };
@@ -1182,10 +1186,12 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-      window.removeEventListener('touchcancel', onTouchEnd);
+      touchInputRef.current.reset();
+      renderer.domElement.removeEventListener('pointerdown', onLookStart);
+      renderer.domElement.removeEventListener('pointermove', onLookMove);
+      renderer.domElement.removeEventListener('pointerup', onLookEnd);
+      renderer.domElement.removeEventListener('pointercancel', onLookEnd);
+      renderer.domElement.removeEventListener('lostpointercapture', onLookEnd);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       document.removeEventListener('pointerlockerror', onPointerLockError);
       document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -1277,7 +1283,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
   return (
     <div className="relative w-screen h-full overflow-hidden select-none font-minecraft">
       {/* 3D Canvas */}
-      <div ref={containerRef} className="w-full h-full cursor-none" />
+      <div ref={containerRef} className="sandbox-canvas w-full h-full cursor-none" />
 
       {/* Inverted Minecraft Crosshair */}
       {!isPaused && (isLocked || isTouchDevice) && (
@@ -1363,26 +1369,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
             {/* Row 1: [Empty] [▲ Forward] [Empty] */}
             <div />
             <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.forward = true;
-                setDpadActive((p) => ({ ...p, forward: true }));
-              }}
-              onPointerUp={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.forward = false;
-                setDpadActive((p) => ({ ...p, forward: false }));
-              }}
-              onPointerLeave={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.forward = false;
-                setDpadActive((p) => ({ ...p, forward: false }));
-              }}
-              onPointerCancel={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.forward = false;
-                setDpadActive((p) => ({ ...p, forward: false }));
-              }}
+              {...movementControl('forward')}
+              aria-label="Move forward (W)"
               className={`pe-button rounded-t ${dpadActive.forward ? 'active' : ''}`}
               title="Move Forward"
             >
@@ -1392,26 +1380,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
             {/* Row 2: [◄ Left] [⬥ Center Sneak/Sprint] [► Right] */}
             <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.left = true;
-                setDpadActive((p) => ({ ...p, left: true }));
-              }}
-              onPointerUp={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.left = false;
-                setDpadActive((p) => ({ ...p, left: false }));
-              }}
-              onPointerLeave={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.left = false;
-                setDpadActive((p) => ({ ...p, left: false }));
-              }}
-              onPointerCancel={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.left = false;
-                setDpadActive((p) => ({ ...p, left: false }));
-              }}
+              {...movementControl('left')}
+              aria-label="Move left (A)"
               className={`pe-button rounded-l ${dpadActive.left ? 'active' : ''}`}
               title="Strafe Left"
             >
@@ -1432,26 +1402,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
             </button>
 
             <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.right = true;
-                setDpadActive((p) => ({ ...p, right: true }));
-              }}
-              onPointerUp={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.right = false;
-                setDpadActive((p) => ({ ...p, right: false }));
-              }}
-              onPointerLeave={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.right = false;
-                setDpadActive((p) => ({ ...p, right: false }));
-              }}
-              onPointerCancel={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.right = false;
-                setDpadActive((p) => ({ ...p, right: false }));
-              }}
+              {...movementControl('right')}
+              aria-label="Move right (D)"
               className={`pe-button rounded-r ${dpadActive.right ? 'active' : ''}`}
               title="Strafe Right"
             >
@@ -1461,26 +1413,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
             {/* Row 3: [Empty] [▼ Backward] [Empty] */}
             <div />
             <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.backward = true;
-                setDpadActive((p) => ({ ...p, backward: true }));
-              }}
-              onPointerUp={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.backward = false;
-                setDpadActive((p) => ({ ...p, backward: false }));
-              }}
-              onPointerLeave={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.backward = false;
-                setDpadActive((p) => ({ ...p, backward: false }));
-              }}
-              onPointerCancel={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.backward = false;
-                setDpadActive((p) => ({ ...p, backward: false }));
-              }}
+              {...movementControl('backward')}
+              aria-label="Move backward (S)"
               className={`pe-button rounded-b ${dpadActive.backward ? 'active' : ''}`}
               title="Move Backward"
             >
@@ -1520,26 +1454,8 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
 
             {/* Classic Minecraft PE Jump Button */}
             <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.jump = true;
-                setDpadActive((p) => ({ ...p, jump: true }));
-              }}
-              onPointerUp={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.jump = false;
-                setDpadActive((p) => ({ ...p, jump: false }));
-              }}
-              onPointerLeave={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.jump = false;
-                setDpadActive((p) => ({ ...p, jump: false }));
-              }}
-              onPointerCancel={(e) => {
-                e.preventDefault();
-                mobileMoveRef.current.jump = false;
-                setDpadActive((p) => ({ ...p, jump: false }));
-              }}
+              {...movementControl('jump')}
+              aria-label="Jump"
               className={`pe-jump-btn ${dpadActive.jump ? 'active' : ''}`}
               title="Jump"
             >
@@ -1595,7 +1511,7 @@ export const MinecraftGame: React.FC<MinecraftGameProps> = ({ onQuit }) => {
         {/* Control Hints */}
         <div className="text-[9px] sm:text-[10px] text-gray-300 mc-text-shadow mt-1 text-center">
           {isTouchDevice
-            ? 'D-Pad: Move • Swipe right side: Look • ⛏️ Mine • 🧱 Place • ▲ Jump'
+            ? 'Hold / slide D-Pad: Move • Swipe world with another finger: Look • ⛏️ Mine • 🧱 Place • ▲ Jump'
             : 'WASD: Move • Ctrl: Sprint • Space: Jump • Left: Mine • Right: Place • Wheel / 1–9: Hotbar • Esc: Pause'}
         </div>
       </div>

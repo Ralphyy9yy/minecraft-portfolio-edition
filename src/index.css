@@ -847,6 +847,13 @@ textarea,
 }
 
 /* Minecraft Pocket Edition (PE) Mobile Touch Controls */
+.sandbox-canvas,
+.sandbox-canvas canvas {
+  /* Browser panning/pinch zoom must not cancel simultaneous game gestures. */
+  touch-action: none;
+  user-select: none;
+}
+
 .pe-dpad-container {
   display: grid;
   grid-template-columns: repeat(3, 46px);
